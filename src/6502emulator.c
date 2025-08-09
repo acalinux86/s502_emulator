@@ -1,10 +1,24 @@
 #include "./6502emulator.h"
-#include <stdio.h>
 
-#define MAX_CAPACITY_OF_U8 0xFF
+#include <stdio.h>
+#include <assert.h>
+
+#define MAX_CAPACITY_OF_EACH_PAGE 0x100 // 256
+#define NUMBER_OF_PAGES 0x100 // 256
+
+// Registers
+typedef u8 Stack;
+typedef u8 Register_X;
+typedef u8 Register_Y;
+typedef u8 Accumulator;
+typedef u16 PC; // Program Counter
+typedef u8 PSR; // Process Status Register
+
+typedef u8 Memory;
+typedef u8 Address;
 
 // NOTE: The Table Below shows the relative address of each page
-u8 address[MAX_CAPACITY_OF_U8 + 1] = {
+Address address[MAX_CAPACITY_OF_EACH_PAGE] = {
     0X00, 0X01, 0X02, 0X03, 0X04, 0X05, 0X06, 0X07, 0X08, 0X09, 0X0A, 0X0B, 0X0C, 0X0D, 0X0E, 0X0F,
     0X10, 0X11, 0X12, 0X13, 0X14, 0X15, 0X16, 0X17, 0X18, 0X19, 0X1A, 0X1B, 0X1C, 0X1D, 0X1E, 0X1F,
     0X20, 0X21, 0X22, 0X23, 0X24, 0X25, 0X26, 0X27, 0X28, 0X29, 0X2A, 0X2B, 0X2C, 0X2D, 0X2E, 0X2F,
@@ -23,20 +37,15 @@ u8 address[MAX_CAPACITY_OF_U8 + 1] = {
     0XF0, 0XF1, 0XF2, 0XF3, 0XF4, 0XF5, 0XF6, 0XF7, 0XF8, 0XF9, 0XFA, 0XFB, 0XFC, 0XFD, 0XFE, 0XFF,
 };
 
-// Registers
-typedef u8 Stack;
-typedef u8 Register_X;
-typedef u8 Register_Y;
-typedef u8 Accumulator;
-typedef u16 PC; // Program Counter
-typedef u8 PSR; // Process Status Register
+// Memory Layout
+Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0};
 
 // Stack Operations
 void s502_print_stack();
-void s502_push_stack(u16 value);
+void s502_push_stack(u8 value);
 u8 s502_pull_stack();
 
-Stack stack[MAX_CAPACITY_OF_U8]; // Page 1
+// We wanna Track the stack Size
 u8 stack_size = 0;
 
 void s502_print_stack()
@@ -44,31 +53,30 @@ void s502_print_stack()
     printf("Stack Status...\n");
     if (stack_size > 0) {
         for (u8 i = 0; i < stack_size; ++i) {
-		 printf("%i: %u\n", i, stack[i]);
+            printf("%i: %u\n", i, memory[0x01][i]);
         }
     } else {
-	printf("Stack Empty\n");
+        printf("Stack Empty\n");
     }
 }
 
-void s502_push_stack(u16 value)
+void s502_push_stack(u8 value)
 {
-    stack[stack_size] = value;
+    // NOTE: Stack Operations are limited to only page zero of the 6502
+    assert(stack_size < MAX_CAPACITY_OF_EACH_PAGE - 1 && "Stack Overflow");
+    memory[0x01][stack_size] = value;
     stack_size++;
 }
 
 u8 s502_pull_stack()
 {
+    assert(stack_size > 0 && "Stack Underflow");
     stack_size--;
-    return stack[stack_size];
+    return memory[0x01][stack_size];
 }
 
 int main(void)
 {
-    s502_print_stack();
-    s502_push_stack(10);
-    s502_print_stack();
-    s502_pull_stack();
     s502_print_stack();
     return 0;
 }
