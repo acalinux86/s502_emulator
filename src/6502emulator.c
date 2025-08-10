@@ -38,7 +38,7 @@ Address address[MAX_CAPACITY_OF_EACH_PAGE] = {
 };
 
 // Memory Layout
-Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0};
+Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0X00};
 
 // Stack Operations
 void s502_print_stack();
@@ -47,24 +47,25 @@ u8 s502_pull_stack();
 
 // We wanna Track the stack Size
 u8 stack_size = 0;
+Stack *stack_pointer = memory[0x01];
 
-void s502_print_stack()
+void s502_dump_page(u8 *page)
 {
-    printf("Stack Status...\n");
-    if (stack_size > 0) {
-        for (u8 i = 0; i < stack_size; ++i) {
-            printf("%i: %u\n", i, memory[0x01][i]);
+    u8 page_width = 16;
+    u8 page_height = 16;
+    for (u8 i = 0; i < page_width; ++i) {
+        for (u8 j = 0; j < page_height; ++j) {
+            printf("0X%02X ", page[i * page_height + j]);
         }
-    } else {
-        printf("Stack Empty\n");
+        printf("\n");
     }
 }
 
 void s502_push_stack(u8 value)
 {
-    // NOTE: Stack Operations are limited to only page zero of the 6502
+    // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
     assert(stack_size < MAX_CAPACITY_OF_EACH_PAGE - 1 && "Stack Overflow");
-    memory[0x01][stack_size] = value;
+    stack_pointer[stack_size] = value;
     stack_size++;
 }
 
@@ -72,11 +73,23 @@ u8 s502_pull_stack()
 {
     assert(stack_size > 0 && "Stack Underflow");
     stack_size--;
-    return memory[0x01][stack_size];
+    return stack_pointer[stack_size];
+}
+
+void s502_dump_memory()
+{
+    for (u8 i = 0; i < NUMBER_OF_PAGES - 1; ++i) {
+        s502_dump_page(memory[i]);
+    }
 }
 
 int main(void)
 {
-    s502_print_stack();
+    s502_push_stack(10);
+    s502_dump_memory();
     return 0;
 }
+
+// TODO: Add Read/Write Access to Memory
+// TODO: Simple 6502 Assembler Program
+// TODO: Add dump Memory Function
