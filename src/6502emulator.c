@@ -40,14 +40,10 @@ Address address[MAX_CAPACITY_OF_EACH_PAGE] = {
 // Memory Layout
 Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0X00};
 
-// Stack Operations
-void s502_print_stack();
-void s502_push_stack(u8 value);
-u8 s502_pull_stack();
-
 // We wanna Track the stack Size
 u8 stack_size = 0;
 Stack *stack_pointer = memory[0x01];
+
 
 void s502_dump_page(u8 *page)
 {
