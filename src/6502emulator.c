@@ -1,8 +1,8 @@
-#include "./6502emulator.h"
-
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 
+#include "./6502emulator.h"
 #define MAX_CAPACITY_OF_EACH_PAGE 0x100 // 256
 #define NUMBER_OF_PAGES 0x100 // 256
 
@@ -17,6 +17,32 @@ typedef u8 PSR; // Process Status Register
 typedef u8 Memory;
 typedef u8 Address;
 typedef u8 Zero_Page;
+
+typedef enum {
+    N_BIT_FLAG = 0x80, // Negative bit flag
+    V_BIT_FLAG = 0x40, // Overflow bit flag
+    B_BIT_FLAG = 0x10, // Break bit flag
+    D_BIT_FLAG = 0x08, // Decimal mode bit flag
+    I_BIT_FLAG = 0x04, // Interrupt disable bit flag
+    Z_BIT_FLAG = 0x02, // Zero bit flag
+    C_BIT_FLAG = 0x01, // Carry bit flag
+} PSR_Flags;
+
+typedef enum {
+    IMPLICIT,
+    ACCUMULATOR,
+    IMMEDIATE,
+    ZERO_PAGE,
+    ZERO_PAGE_X,
+    ZERO_PAGE_Y,
+    RELATIVE,
+    ABSOLUTE,
+    ABSOLUTE_X,
+    ABSOLUTE_Y,
+    INDIRECT,
+    INDEXED_INDIRECT,
+    INDIRECT_INDEXED,
+} Addressing_Modes;
 
 // NOTE: The Table Below shows the relative address of each page
 Address address[MAX_CAPACITY_OF_EACH_PAGE] = {
@@ -38,13 +64,19 @@ Address address[MAX_CAPACITY_OF_EACH_PAGE] = {
     0XF0, 0XF1, 0XF2, 0XF3, 0XF4, 0XF5, 0XF6, 0XF7, 0XF8, 0XF9, 0XFA, 0XFB, 0XFC, 0XFD, 0XFE, 0XFF,
 };
 
-// Memory Layout
-Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0X00};
+// Global Variables
 
+Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0X00}; // Memory Layout
 Zero_Page *zero_page = memory[0x00]; // Page 0 (Zero Page)
-
-u8 stack_size = 0; // We wanna Track the stack Size
+u8 stack_size = 0x00; // We wanna Track the stack Size
 Stack *stack_pointer = memory[0x01]; // Page 1
+
+// Registers
+Accumulator accumulator = 0x00;
+Register_X X = 0x00;
+Register_Y Y = 0x00;
+PC program_counter = 0x00;
+PSR processor_status_register = 0x00;
 
 void s502_dump_page(u8 *page)
 {
@@ -80,10 +112,43 @@ void s502_dump_memory()
     }
 }
 
+// NOTE: Print Stats
+void s502_print_stats()
+{
+    printf("Stack       : %u\n", stack_pointer[stack_size]);
+    printf("Register_X  : %u\n", X);
+    printf("Register_Y  : %u\n", Y);
+    printf("Accumulator : %u\n", accumulator);
+    printf("PC          : %u\n", program_counter);
+    printf("PSR         : %u\n", processor_status_register);
+}
+
+// NOTE: Set PSR FLAGS
+void s502_set_psr_flags(PSR_Flags flags)
+{
+    processor_status_register |= flags;
+}
+
+u8 read_memory(u8 operand)
+{
+    (void) operand;
+    UNIMPLEMENTED("read_memory");
+}
+
+// NOTE: Implement A Simple Zero Page Operation
+Accumulator s502_load_accumulator(u8 operand)
+{
+    if (accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
+    accumulator = read_memory(operand);
+    if ((accumulator << 7) != 0) s502_set_psr_flags(N_BIT_FLAG);
+    return accumulator;
+}
+
 int main(void)
 {
-    s502_push_stack(10);
-    s502_dump_memory();
+    s502_print_stats();
+    accumulator = s502_load_accumulator(0x10);
+    s502_print_stats();
     return 0;
 }
 
