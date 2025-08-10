@@ -16,6 +16,7 @@ typedef u8 PSR; // Process Status Register
 
 typedef u8 Memory;
 typedef u8 Address;
+typedef u8 Zero_Page;
 
 // NOTE: The Table Below shows the relative address of each page
 Address address[MAX_CAPACITY_OF_EACH_PAGE] = {
@@ -40,10 +41,10 @@ Address address[MAX_CAPACITY_OF_EACH_PAGE] = {
 // Memory Layout
 Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0X00};
 
-// We wanna Track the stack Size
-u8 stack_size = 0;
-Stack *stack_pointer = memory[0x01];
+Zero_Page *zero_page = memory[0x00]; // Page 0 (Zero Page)
 
+u8 stack_size = 0; // We wanna Track the stack Size
+Stack *stack_pointer = memory[0x01]; // Page 1
 
 void s502_dump_page(u8 *page)
 {
