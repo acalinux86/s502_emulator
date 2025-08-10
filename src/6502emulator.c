@@ -80,3 +80,6 @@ int main(void)
     s502_print_stack();
     return 0;
 }
+
+// TODO: Add Read/Write Access to Memory
+// TODO: Simple 6502 Assembler Program
