@@ -69,27 +69,101 @@ void s502_set_psr_flags(PSR_Flags flags)
     processor_status_register |= flags;
 }
 
-BYTE read_memory(WORD operand)
+BYTE s502_read_memory(Operand operand)
 {
-    (void) operand;
-    UNIMPLEMENTED("read_memory");
+    return memory[operand.page][operand.addr];
+}
+
+void s502_write_memory(Operand operand, BYTE value)
+{
+    memory[operand.page][operand.addr] = value;
+}
+
+const char *s502_addr_mode_as_cstr(Addressing_Modes mode)
+{
+    switch (mode) {
+    case IMPLICIT:         return "IMPLICIT";
+    case ACCUMULATOR:      return "ACCUMULATOR";
+    case IMMEDIATE:        return "IMMEDIATE";
+    case ZERO_PAGE:        return "ZERO_PAGE";
+    case ZERO_PAGE_X:      return "ZERO_PAGE_X";
+    case ZERO_PAGE_Y:      return "ZERO_PAGE_Y";
+    case RELATIVE:         return "RELATIVE";
+    case ABSOLUTE:         return "ABSOLUTE";
+    case ABSOLUTE_X:       return "ABSOLUTE_X";
+    case ABSOLUTE_Y:       return "ABSOLUTE_Y";
+    case INDIRECT:         return "INDIRECT";
+    case INDEXED_INDIRECT: return "INDEXED_INDIRECT";
+    case INDIRECT_INDEXED: return "INDIRECT_INDEXED";
+    default:
+        return NULL;
+    }
+}
+
+const char *s502_opcode_as_cstr(Opcode opcode)
+{
+    switch (opcode) {
+    case BRK: return "BRK";
+    case RTS: return "RTS";
+    default:
+        return NULL;
+    }
+}
+
+void s502_clear_carry_bit()
+{
+    s502_set_psr_flags(C_BIT_FLAG & 0);
+}
+
+void s502_store_accumulator(Operand operand)
+{
+    s502_write_memory(operand, accumulator);
+    accumulator = 0x00;// clear the accumulator
+}
+
+void s502_add_with_carry(Operand operand)
+{
+    BYTE value = s502_read_memory(operand);
+    accumulator += value;
+    if (value >= 255) s502_set_psr_flags(C_BIT_FLAG);
 }
 
 // NOTE: Implement A Simple Zero Page Operation
-Accumulator s502_load_accumulator(WORD operand)
+Accumulator s502_load_accumulator(Operand operand)
 {
+    // Immediate mode just loads the value into the accumulator
+    // All other read from memory
     if (accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    accumulator = read_memory(operand);
+    // accumulator = s502_read_memory(operand); For later
+    accumulator = operand.addr; // hardcode
     if ((accumulator << 7) != 0) s502_set_psr_flags(N_BIT_FLAG);
     return accumulator;
 }
 
+void s502_break()
+{
+    s502_set_psr_flags(B_BIT_FLAG);
+    program_counter = 0xFFFF;
+    printf("Program Interrupted\n");
+}
+
 int main(void)
 {
-    Address a = address[126];
-    printf("%02X\n", a);
+    // populate Memory
+    s502_write_memory((Operand){.page = 0x00, .addr = 0x65}, 0x0A);
+    s502_write_memory((Operand){.page = 0x00, .addr = 0x66}, 0x0A);
+    s502_clear_carry_bit();
+    s502_load_accumulator((Operand){.page = 0x00, .addr = 0x00});
+    s502_add_with_carry((Operand){.page = 0x00, .addr = 0x65});
+    s502_add_with_carry((Operand){.page = 0x00, .addr = 0x66});
+    s502_store_accumulator((Operand){.page = 0x00, .addr = 0x67});
+    s502_dump_page(zero_page);
     return 0;
 }
 
 // TODO: Add Read/Write Access to Memory
 // TODO: Simple 6502 Assembler Program
+// TODO: Apply the Instruction
+// TODO: Switch-Case Enum Addressing Modes on Instruction
+//       to find out which mode then implement that mode and
+//       read it
