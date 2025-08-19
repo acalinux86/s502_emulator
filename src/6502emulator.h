@@ -48,10 +48,20 @@ typedef enum {
     INDIRECT_INDEXED,
 } Addressing_Modes;
 
+typedef enum {
+    BRK,
+    RTS,
+} Opcode;
+
+typedef struct {
+    BYTE page;
+    BYTE addr;
+} Operand;
+
 typedef struct {
     Addressing_Modes mode;
-    BYTE opcode;
-    WORD operand;
+    Opcode opcode;
+    Operand operand;
 } Instruction;
 
 // NOTE: The Table Below shows the relative address of each page
