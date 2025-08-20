@@ -8,7 +8,7 @@
 // Global Variables
 Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0X00}; // Memory Layout
 Zero_Page *zero_page = memory[0x00]; // Page 0 (Zero Page)
-BYTE stack_size = 0x00; // We wanna Track the stack Size
+u8 stack_size = 0x00; // We wanna Track the stack Size
 Stack *stack_pointer = memory[0x01]; // Page 1
 
 // Registers
@@ -18,19 +18,19 @@ Register_Y Y = 0x00;
 PC program_counter = 0x00;
 PSR processor_status_register = 0x00;
 
-void s502_dump_page(BYTE *page)
+void s502_dump_page(u8 *page)
 {
-    BYTE page_width = 16;
-    BYTE page_height = 16;
-    for (BYTE i = 0; i < page_width; ++i) {
-        for (BYTE j = 0; j < page_height; ++j) {
+    u8 page_width = 16;
+    u8 page_height = 16;
+    for (u8 i = 0; i < page_width; ++i) {
+        for (u8 j = 0; j < page_height; ++j) {
             printf("0X%02X ", page[i * page_height + j]);
         }
         printf("\n");
     }
 }
 
-void s502_push_stack(BYTE value)
+void s502_push_stack(u8 value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
     assert(stack_size < MAX_CAPACITY_OF_EACH_PAGE - 1 && "Stack Overflow");
@@ -38,7 +38,7 @@ void s502_push_stack(BYTE value)
     stack_size++;
 }
 
-BYTE s502_pull_stack()
+u8 s502_pull_stack()
 {
     assert(stack_size > 0 && "Stack Underflow");
     stack_size--;
@@ -47,7 +47,7 @@ BYTE s502_pull_stack()
 
 void s502_dump_memory()
 {
-    for (BYTE i = 0; i < NUMBER_OF_PAGES - 1; ++i) {
+    for (u8 i = 0; i < NUMBER_OF_PAGES - 1; ++i) {
         s502_dump_page(memory[i]);
     }
 }
@@ -69,14 +69,14 @@ void s502_set_psr_flags(PSR_Flags flags)
     processor_status_register |= flags;
 }
 
-BYTE s502_read_memory(Operand operand)
+u8 s502_read_memory(Operand operand)
 {
-    return memory[operand.page][operand.addr];
+    return memory[operand.page][operand.offset];
 }
 
-void s502_write_memory(Operand operand, BYTE value)
+void s502_write_memory(Operand operand, u8 value)
 {
-    memory[operand.page][operand.addr] = value;
+    memory[operand.page][operand.offset] = value;
 }
 
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode)
@@ -105,6 +105,9 @@ const char *s502_opcode_as_cstr(Opcode opcode)
     switch (opcode) {
     case BRK: return "BRK";
     case RTS: return "RTS";
+    case ADC: return "ADC";
+    case LDA: return "LDA";
+    case STA: return "STA";
     default:
         return NULL;
     }
@@ -123,7 +126,7 @@ void s502_store_accumulator(Operand operand)
 
 void s502_add_with_carry(Operand operand)
 {
-    BYTE value = s502_read_memory(operand);
+    u8 value = s502_read_memory(operand);
     accumulator += value;
     if (value >= 255) s502_set_psr_flags(C_BIT_FLAG);
 }
@@ -135,7 +138,7 @@ Accumulator s502_load_accumulator(Operand operand)
     // All other read from memory
     if (accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
     // accumulator = s502_read_memory(operand); For later
-    accumulator = operand.addr; // hardcode
+    accumulator = operand.offset; // hardcode
     if ((accumulator << 7) != 0) s502_set_psr_flags(N_BIT_FLAG);
     return accumulator;
 }
@@ -150,20 +153,13 @@ void s502_break()
 int main(void)
 {
     // populate Memory
-    s502_write_memory((Operand){.page = 0x00, .addr = 0x65}, 0x0A);
-    s502_write_memory((Operand){.page = 0x00, .addr = 0x66}, 0x0A);
+    s502_write_memory((Operand){.page = 0x00, .offset = 0x65}, 0x0A);
+    s502_write_memory((Operand){.page = 0x00, .offset = 0x66}, 0x0A);
     s502_clear_carry_bit();
-    s502_load_accumulator((Operand){.page = 0x00, .addr = 0x00});
-    s502_add_with_carry((Operand){.page = 0x00, .addr = 0x65});
-    s502_add_with_carry((Operand){.page = 0x00, .addr = 0x66});
-    s502_store_accumulator((Operand){.page = 0x00, .addr = 0x67});
+    s502_load_accumulator((Operand){.page = 0x00, .offset = 0x00});
+    s502_add_with_carry((Operand){.page = 0x00, .offset = 0x65});
+    s502_add_with_carry((Operand){.page = 0x00, .offset = 0x66});
+    s502_store_accumulator((Operand){.page = 0x00, .offset = 0x67});
     s502_dump_page(zero_page);
     return 0;
 }
-
-// TODO: Add Read/Write Access to Memory
-// TODO: Simple 6502 Assembler Program
-// TODO: Apply the Instruction
-// TODO: Switch-Case Enum Addressing Modes on Instruction
-//       to find out which mode then implement that mode and
-//       read it
