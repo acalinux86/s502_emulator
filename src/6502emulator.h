@@ -11,7 +11,6 @@ typedef uint16_t u16;
 typedef u8 Stack;
 typedef u8 Register_X;
 typedef u8 Register_Y;
-typedef u8 Accumulator;
 typedef u16 PC; // Program Counter
 typedef u8 PSR; // Process Status Register
 
@@ -52,6 +51,7 @@ typedef enum {
     ADC,
 
     LDA,
+    CLC,
 
     STA,
 } Opcode;
@@ -59,6 +59,22 @@ typedef enum {
 typedef struct {
     u8 page;
     u8 offset;
+} Location;
+
+typedef struct {
+    u8 eight_bit;    // 8-bit data
+    u16 sixteen_bit; // 16-bit data
+} Data;
+
+typedef enum {
+    OPERAND_DATA,
+    OPERAND_LOCATION,
+} Operand_Type;
+
+typedef union {
+    Operand_Type type;
+    Data data;
+    Location location;
 } Operand;
 
 typedef struct {
@@ -67,9 +83,4 @@ typedef struct {
     Operand operand;
 } Instruction;
 
-#define UNIMPLEMENTED(message)                                  \
-    do {                                                        \
-        fprintf(stderr, "%s not implement yet!!!\n", message) ; \
-        exit(1);                                                \
-    } while (0)
 #endif // EMULATOR_6502_H_

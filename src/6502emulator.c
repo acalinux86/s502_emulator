@@ -9,14 +9,28 @@
 Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0X00}; // Memory Layout
 Zero_Page *zero_page = memory[0x00]; // Page 0 (Zero Page)
 u8 stack_size = 0x00; // We wanna Track the stack Size
-Stack *stack_pointer = memory[0x01]; // Page 1
+Stack *stack = memory[0x01]; // Page 1
 
 // Registers
-Accumulator accumulator = 0x00;
+u8 accumulator = 0x00;
 Register_X X = 0x00;
 Register_Y Y = 0x00;
 PC program_counter = 0x00;
 PSR processor_status_register = 0x00;
+
+#define UNIMPLEMENTED(message)                                         \
+    do {                                                               \
+        fprintf(stderr, "ERROR: %s not implement yet!!!\n", message) ; \
+        exit(1);                                                       \
+    } while (0)
+
+const char *s502_opcode_as_cstr(Opcode opcode);
+#define ILLEGAL_ADDRESSING(mode, opcode)                            \
+    do {                                                            \
+        fprintf(stderr, "ERROR: Invalid `mode` mode on %s\n",       \
+                s502_opcode_as_cstr(opcode));                       \
+        exit(1);                                                    \
+    } while (0)
 
 void s502_dump_page(u8 *page)
 {
@@ -34,7 +48,7 @@ void s502_push_stack(u8 value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
     assert(stack_size < MAX_CAPACITY_OF_EACH_PAGE - 1 && "Stack Overflow");
-    stack_pointer[stack_size] = value;
+    stack[stack_size] = value;
     stack_size++;
 }
 
@@ -42,7 +56,7 @@ u8 s502_pull_stack()
 {
     assert(stack_size > 0 && "Stack Underflow");
     stack_size--;
-    return stack_pointer[stack_size];
+    return stack[stack_size];
 }
 
 void s502_dump_memory()
@@ -55,7 +69,7 @@ void s502_dump_memory()
 // NOTE: Print Stats
 void s502_print_stats()
 {
-    printf("Stack       : %u\n", stack_pointer[stack_size]);
+    printf("Stack       : %u\n", stack[stack_size]);
     printf("Register_X  : %u\n", X);
     printf("Register_Y  : %u\n", Y);
     printf("Accumulator : %u\n", accumulator);
@@ -69,14 +83,14 @@ void s502_set_psr_flags(PSR_Flags flags)
     processor_status_register |= flags;
 }
 
-u8 s502_read_memory(Operand operand)
+u8 s502_read_memory(Location location)
 {
-    return memory[operand.page][operand.offset];
+    return memory[location.page][location.offset];
 }
 
-void s502_write_memory(Operand operand, u8 value)
+void s502_write_memory(Location location, Data data)
 {
-    memory[operand.page][operand.offset] = value;
+    memory[location.page][location.offset] = data;
 }
 
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode)
@@ -108,6 +122,7 @@ const char *s502_opcode_as_cstr(Opcode opcode)
     case ADC: return "ADC";
     case LDA: return "LDA";
     case STA: return "STA";
+    case CLC: return "CLC";
     default:
         return NULL;
     }
@@ -120,7 +135,7 @@ void s502_clear_carry_bit()
 
 void s502_store_accumulator(Operand operand)
 {
-    s502_write_memory(operand, accumulator);
+    s502_write_memory(operand.location, accumulator);
     accumulator = 0x00;// clear the accumulator
 }
 
@@ -131,16 +146,73 @@ void s502_add_with_carry(Operand operand)
     if (value >= 255) s502_set_psr_flags(C_BIT_FLAG);
 }
 
-// NOTE: Implement A Simple Zero Page Operation
-Accumulator s502_load_accumulator(Operand operand)
+void s502_set_accumulator(u8 data)
 {
-    // Immediate mode just loads the value into the accumulator
-    // All other read from memory
-    if (accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    // accumulator = s502_read_memory(operand); For later
-    accumulator = operand.offset; // hardcode
+    accumulator = data;
+    if (accumulator == 0)        s502_set_psr_flags(Z_BIT_FLAG);
     if ((accumulator << 7) != 0) s502_set_psr_flags(N_BIT_FLAG);
+    program_counter++;
     return accumulator;
+}
+
+
+// TODO: Find a Way to split a 16-bit data into page and offset
+// TODO: Refactor LDA to switch-case on operand types
+void s502_load_accumulator(Instruction instruction)
+{
+    UNIMPLEMENTED("s502_load_accumulator");
+    switch (instruction.mode) {
+    case IMMEDIATE: {
+        // Immediate mode just loads a value into the accumulator
+        s502_set_accumulator(instruction.operand.data);
+    } break;
+
+    case ZERO_PAGE: {
+        // if the operand doesn't contain any page, assumed that it is page zero
+        assert(instruction.operand.location.page == 0x00 && "Invalid Page Zero Address");
+        u8 data = s502_read_memory(instruction.operand.location);
+        s502_set_accumulator(data);
+    } break;
+
+    case ZERO_PAGE_X: {
+        // zero page X modes sums x register to the zero page operand and uses it as index
+        // It wraps around incase it exceeds page MAX_CAPACITY_OF_EACH_PAGE
+        assert(instruction.operand.location.page == 0x00 && "Invalid Page Zero Address");
+        u8 index = instruction.operand.location.offset + X;
+        u8 page = instruction.operand.location.page;
+        u8 data = s502_read_memory((Location) {.page = page, .offset = index});
+        s502_set_accumulator(data);
+    } break;
+
+    case ABSOLUTE: {
+        // uses the absolute location in operand to load access memory into accumulator
+        u8 data = s502_read_memory(instruction.operand.location);
+        s502_set_accumulator(data);
+    } break;
+
+    case ABSOLUTE_X: {
+        // zero page x but absolute
+        u8 index = instruction.operand.location.offset + X;
+        if (index > 0xFF) instruction.operand.location.page++;
+        u8 page = instruction.operand.location.page;
+        u8 data = s502_read_memory((Location) {.page = page, .offset = index});
+        s502_set_accumulator(data);
+    } break;
+
+    case ABSOLUTE_Y: {
+        // absolute x but y
+        u8 index = instruction.operand.location.offset + Y;
+        if (index > 0xFF) instruction.operand.location.page++;
+        u8 page = instruction.operand.location.page;
+        u8 data = s502_read_memory((Location) {.page = page, .offset = index});
+        s502_set_accumulator(data);
+    } break;
+
+        case
+    default: {
+        ILLEGAL_ADDRESSING(LDA);
+    }
+    }
 }
 
 void s502_break()
@@ -148,6 +220,16 @@ void s502_break()
     s502_set_psr_flags(B_BIT_FLAG);
     program_counter = 0xFFFF;
     printf("Program Interrupted\n");
+}
+
+bool s502_decode(Instruction instruction)
+{
+    switch (instruction.opcode) {
+    case LDA:
+        s502_load_accumulator(instruction); break;
+    default:
+        ILLEGAL_ADDRESSING(instruction.mode, instruction.opcode);
+    }
 }
 
 int main(void)
