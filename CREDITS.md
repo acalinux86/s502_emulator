@@ -5,3 +5,4 @@
 ## Additional Resources
 - 6502 Register Overview - https://imgur.com/1fsydip
 - 6502 CPU DataSheet - https://www.princeton.edu/~mae412/HANDOUTS/Datasheets/6502.pdf
+- Program counter - https://www.youtube.com/watch?v=ccf9ngGIb8c
