@@ -35,7 +35,7 @@ typedef enum {
     ABSOLUTE_X,
     ABSOLUTE_Y,
     INDIRECT,
-    INDEXED_INDIRECT,
+    INDEXED_INDIRECT, // a pointer to the address of the low byte held in zero page
     INDIRECT_INDEXED,
 } Addressing_Modes;
 
