@@ -4,9 +4,6 @@
 typedef uint8_t  u8;
 typedef uint16_t u16;
 
-#define MAX_CAPACITY_OF_EACH_PAGE 0x100 // 256
-#define NUMBER_OF_PAGES 0x100 // 256
-
 // Registers
 typedef u8 Stack;
 typedef u8 Register_X;
@@ -15,8 +12,6 @@ typedef u16 PC; // Program Counter
 typedef u8 PSR; // Process Status Register
 
 typedef u8 Memory;
-typedef u8 Address;
-typedef u8 Zero_Page;
 
 typedef enum {
     N_BIT_FLAG = 0x80, // Negative bit flag
@@ -56,30 +51,37 @@ typedef enum {
     STA,
 } Opcode;
 
+typedef u16 Absolute;
+
 typedef struct {
     u8 page;
     u8 offset;
 } Location;
 
-typedef struct {
-    u8 eight_bit;    // 8-bit data
-    u16 sixteen_bit; // 16-bit data
-} Data;
+typedef union {
+    Location loc;
+    Absolute absolute;
+} Address;
 
 typedef enum {
-    OPERAND_DATA,
+    OPERAND_ABSOLUTE,
     OPERAND_LOCATION,
+    OPERAND_DATA,
 } Operand_Type;
 
 typedef union {
+    Address address;
+    u8 data;
+} Operand_Data;
+
+typedef struct {
     Operand_Type type;
-    Data data;
-    Location location;
+    Operand_Data data;
 } Operand;
 
 typedef struct {
     Addressing_Modes mode;
-    Opcode opcode;
+    Opcode  opcode;
     Operand operand;
 } Instruction;
 
