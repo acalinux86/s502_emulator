@@ -6,11 +6,12 @@
 
 #include "./6502emulator.h"
 
-#define MAX_CAPACITY_OF_EACH_PAGE 0x100 // 256
-#define NUMBER_OF_PAGES 0x100 // 256
+#define MAX_U8     0xFF
+#define MAX_OFFSET MAX_U8
+#define MAX_PAGES  MAX_U8
 
 // Global Variables
-Memory memory[NUMBER_OF_PAGES][MAX_CAPACITY_OF_EACH_PAGE] = {0X00}; // Memory Layout
+Memory memory[MAX_PAGES][MAX_OFFSET] = {0X00}; // Memory Layout
 u8 stack_size = 0x00; // We wanna Track the stack Size
 Stack *stack = memory[0x01]; // Page 1
 
@@ -39,11 +40,12 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
         exit(1);                                            \
     } while (0)
 
-#define ILLEGAL_ACCESS(mode, operand)                           \
-    do {                                                        \
+#define ILLEGAL_ACCESS(mode, operand)                               \
+    do {                                                            \
+        assert(s502_operand_type_as_cstr(operand));                      \
         fprintf(stderr, "ERROR: Invalid `%s` type on `%s` mode. \n",\
-                s502_operand_type_as_cstr(operand),             \
-                s502_addr_mode_as_cstr(mode));                  \
+                s502_operand_type_as_cstr(operand),                 \
+                s502_addr_mode_as_cstr(mode));                      \
     } while (0)
 
 void s502_dump_page(u8 *page)
@@ -61,7 +63,7 @@ void s502_dump_page(u8 *page)
 void s502_push_stack(u8 value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
-    assert(stack_size < MAX_CAPACITY_OF_EACH_PAGE - 1 && "Stack Overflow");
+    assert(stack_size < MAX_OFFSET - 1 && "Stack Overflow");
     stack[stack_size] = value;
     stack_size++;
 }
@@ -75,7 +77,7 @@ u8 s502_pull_stack()
 
 void s502_dump_memory()
 {
-    for (u8 i = 0; i < NUMBER_OF_PAGES - 1; ++i) {
+    for (u8 i = 0; i < MAX_PAGES; ++i) {
         s502_dump_page(memory[i]);
     }
 }
@@ -89,12 +91,6 @@ void s502_print_stats()
     printf("Accumulator : %u\n", accumulator);
     printf("PC          : %u\n", program_counter);
     printf("PSR         : %u\n", processor_status_register);
-}
-
-// NOTE: Set PSR FLAGS
-void s502_set_psr_flags(PSR_Flags flags)
-{
-    processor_status_register |= flags;
 }
 
 u8 s502_read_memory(Location location)
@@ -149,23 +145,17 @@ const char *s502_operand_type_as_cstr(Operand_Type type)
     }
 }
 
-void s502_clear_carry_bit()
+// NOTE: Set PSR FLAGS
+void s502_set_psr_flags(PSR_Flags flags)
 {
-    s502_set_psr_flags(C_BIT_FLAG & 0);
+    processor_status_register |= flags;
 }
 
-// void s502_store_accumulator(Operand operand)
-// {
-//     s502_write_memory(operand.location, accumulator);
-//     accumulator = 0x00;// clear the accumulator
-// }
-
-// void s502_add_with_carry(Operand operand)
-// {
-//     u8 value = s502_read_memory(operand.location);
-//     accumulator += value;
-//     if (value >= 255) s502_set_psr_flags(C_BIT_FLAG);
-// }
+// NOTE: Clear PSR FLAGS
+void s502_clear_psr_flags(PSR_Flags flags)
+{
+    processor_status_register &= flags;
+}
 
 void s502_set_accumulator(u8 data)
 {
@@ -184,7 +174,6 @@ Location u16_to_loc(u16 sixteen_bit)
     };
 }
 
-// TODO: Refactor LDA to switch-case on operand types
 void s502_load_accumulator(Instruction instruction)
 {
     switch (instruction.mode) {
@@ -219,9 +208,8 @@ void s502_load_accumulator(Instruction instruction)
         case OPERAND_LOCATION: {
             Location location = instruction.operand.data.address.loc;
             assert(location.page == 0x00 && "Invalid Page Zero Address");
-            u8 index = location.offset + X;
-            u8 page = location.page;
-            u8 data = s502_read_memory((Location) {.page = page, .offset = index});
+            Location new_loc = { .offset = location.offset + X, .page = location.page};
+            u8 data = s502_read_memory(new_loc);
             s502_set_accumulator(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
@@ -270,7 +258,115 @@ void s502_load_accumulator(Instruction instruction)
     } break;
 
     case INDEXED_INDIRECT: {
-        // TODO:
+        // Adds X register to the offset of the location in the instruction
+        // Fetches the data pointed by the modified location
+        // Uses that data as a new location to index into memory and fetches low-byte
+        // Uses the modified location.offset + 1 to index into memory and fetches high-byte
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            Location new_loc   = {.offset = location.offset + X, .page = location.page};
+            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
+            Location final = {
+                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
+                .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
+            };
+            u8 data = s502_read_memory(final);
+            s502_set_accumulator(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case INDIRECT_INDEXED: {
+        // same as index indirect but the addition of the Y register occurs in the final address
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            Location new_loc   = {.offset = location.offset    , .page = location.page};
+            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
+            Location final = {
+                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
+                .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
+            };
+            final.offset += Y; // final Address that contains the data
+            u8 data = s502_read_memory(final);
+            s502_set_accumulator(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    default: ILLEGAL_ADDRESSING(instruction.mode, instruction.opcode);
+    }
+}
+
+
+void add_with_carry(u8 data)
+{
+    u16 raw = data + accumulator + (processor_status_register & C_BIT_FLAG);
+    u8 result = (u8) raw;
+    if (result == 0) {
+        s502_set_psr_flags(Z_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(Z_BIT_FLAG);
+    }
+
+    if (raw > MAX_U8) {
+        s502_set_psr_flags(V_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(V_BIT_FLAG);
+    }
+
+    if (result & N_BIT_FLAG) {
+        s502_set_psr_flags(N_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(N_BIT_FLAG);
+    }
+
+    accumulator = result;
+}
+
+void s502_add_with_carry(Instruction instruction)
+{
+    switch (instruction.mode) {
+    case IMMEDIATE: {
+        switch (instruction.operand.type) {
+        case OPERAND_DATA: {
+            u8 data = instruction.operand.data.data;
+            add_with_carry(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case ZERO_PAGE: {
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            u8 data = s502_read_memory(location);
+            add_with_carry(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case ZERO_PAGE_X: {
+        // zero page X modes sums x register to the zero page operand and uses it as index
+        // It wraps around incase it exceeds page MAX_CAPACITY_OF_EACH_PAGE
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Page Zero Address");
+            Location new_loc = {.offset = location.offset + X, .page = location.page};
+            u8 data = s502_read_memory(new_loc);
+            add_with_carry(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
     } break;
 
     default: ILLEGAL_ADDRESSING(instruction.mode, instruction.opcode);
@@ -287,10 +383,10 @@ void s502_break()
 bool s502_decode(Instruction instruction)
 {
     switch (instruction.opcode) {
-    case LDA:
-        s502_load_accumulator(instruction); return true;
-    default:
-        return false;
+    case CLC: s502_clear_psr_flags(C_BIT_FLAG);   return true;
+    case LDA: s502_load_accumulator(instruction); return true;
+    case ADC: s502_add_with_carry(instruction);   return true;
+    default:                                      return false;
     }
 }
 
