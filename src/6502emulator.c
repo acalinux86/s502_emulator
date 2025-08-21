@@ -110,20 +110,20 @@ void s502_write_memory(Location location, u8 data)
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode)
 {
     switch (mode) {
-    case IMPLICIT:         return "IMPLICIT";
-    case ACCUMULATOR:      return "ACCUMULATOR";
-    case IMMEDIATE:        return "IMMEDIATE";
-    case ZERO_PAGE:        return "ZERO_PAGE";
-    case ZERO_PAGE_X:      return "ZERO_PAGE_X";
-    case ZERO_PAGE_Y:      return "ZERO_PAGE_Y";
-    case RELATIVE:         return "RELATIVE";
-    case ABSOLUTE:         return "ABSOLUTE";
-    case ABSOLUTE_X:       return "ABSOLUTE_X";
-    case ABSOLUTE_Y:       return "ABSOLUTE_Y";
-    case INDIRECT:         return "INDIRECT";
-    case INDEXED_INDIRECT: return "INDEXED_INDIRECT";
-    case INDIRECT_INDEXED: return "INDIRECT_INDEXED";
-    default:               return NULL;
+    case IMPL: return "IMPLICIT";
+    case ACCU: return "ACCUMULATOR";
+    case IMME: return "IMMEDIATE";
+    case ZP:   return "ZERO_PAGE";
+    case ZPX:  return "ZERO_PAGE_X";
+    case ZPY:  return "ZERO_PAGE_Y";
+    case REL:  return "RELATIVE";
+    case ABS:  return "ABSOLUTE";
+    case ABSX: return "ABSOLUTE_X";
+    case ABSY: return "ABSOLUTE_Y";
+    case IND:  return "INDIRECT";
+    case INDX: return "INDEXED_INDIRECT";
+    case INDY: return "INDIRECT_INDEXED";
+    default:   return NULL;
     }
 }
 
@@ -192,7 +192,7 @@ Location u16_to_loc(u16 sixteen_bit)
 u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
 {
     switch (mode) {
-    case IMMEDIATE: {
+    case IMME: {
         // Immediate mode just loads a value into an opcode
         switch (operand.type) {
         case OPERAND_DATA: {
@@ -202,7 +202,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case ZERO_PAGE: {
+    case ZP: {
         switch (operand.type) {
         case OPERAND_LOCATION: {
             // if the operand doesn't contain any page, assumed that it is page zero
@@ -214,7 +214,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case ZERO_PAGE_X: {
+    case ZPX: {
         // zero page X modes sums x register to the zero page operand and uses it as index
         // It wraps around incase it exceeds page MAX_OFFSET
         switch (operand.type) {
@@ -228,7 +228,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case ABSOLUTE: {
+    case ABS: {
         // uses the absolute location in operand to load access memory into accumulator
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
@@ -240,7 +240,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case ABSOLUTE_X: {
+    case ABSX: {
         // absolute but += X register
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
@@ -253,7 +253,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case ABSOLUTE_Y: {
+    case ABSY: {
         // absolute but += Y register
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
@@ -266,7 +266,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case INDEXED_INDIRECT: {
+    case INDX: {
         // Adds X register to the offset of the location in the instruction
         // Fetches the data pointed by the modified location
         // Uses that data as a new location to index into memory and fetches low-byte
@@ -287,7 +287,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case INDIRECT_INDEXED: {
+    case INDY: {
         // same as index indirect but the addition of the Y register occurs in the final address
         switch (operand.type) {
         case OPERAND_LOCATION: {
@@ -315,7 +315,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
 Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
 {
     switch (mode) {
-    case ZERO_PAGE: {
+    case ZP: {
         switch (operand.type) {
         case OPERAND_LOCATION: {
             // if the operand doesn't contain any page, assumed that it is page zero
@@ -325,7 +325,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case ZERO_PAGE_X: {
+    case ZPX: {
         // zero page X modes sums x register to the zero page operand and uses it as index
         // It wraps around incase it exceeds page MAX_OFFSET
         switch (operand.type) {
@@ -338,7 +338,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case ABSOLUTE: {
+    case ABS: {
         // uses the absolute location in operand to load access memory into accumulator
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
@@ -349,7 +349,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case ABSOLUTE_X: {
+    case ABSX: {
         // absolute but += X register
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
@@ -361,7 +361,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case ABSOLUTE_Y: {
+    case ABSY: {
         // absolute but += Y register
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
@@ -373,7 +373,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case INDEXED_INDIRECT: {
+    case INDX: {
         // Adds X register to the offset of the location in the instruction
         // Fetches the data pointed by the modified location
         // Uses that data as a new location to index into memory and fetches low-byte
@@ -393,7 +393,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         }
     } break;
 
-    case INDIRECT_INDEXED: {
+    case INDY: {
         // same as index indirect but the addition of the Y register occurs in the final address
         switch (operand.type) {
         case OPERAND_LOCATION: {
@@ -486,12 +486,12 @@ int main(void)
     s502_write_memory(u16_to_loc(0x1235), 0xB);
 
     Instruction instruction1 = {
-        .mode = IMPLICIT,
+        .mode = IMPL,
         .opcode = CLC,
     };
 
     Instruction instruction2 = {
-        .mode = IMMEDIATE,
+        .mode = IMME,
         .opcode = LDA,
         .operand = {
             .type = OPERAND_DATA,
@@ -502,7 +502,7 @@ int main(void)
     };
 
     Instruction instruction3 = {
-        .mode = ABSOLUTE,
+        .mode = ABS,
         .opcode = ADC,
         .operand = {
             .type = OPERAND_ABSOLUTE,
@@ -516,7 +516,7 @@ int main(void)
 
 
     Instruction instruction4 = {
-        .mode = ABSOLUTE,
+        .mode = ABS,
         .opcode = ADC,
         .operand = {
             .type = OPERAND_ABSOLUTE,
@@ -529,7 +529,7 @@ int main(void)
     };
 
     Instruction instruction5 = {
-        .mode = ZERO_PAGE,
+        .mode = ZP,
         .opcode = STA,
         .operand = {
             .type = OPERAND_LOCATION,
