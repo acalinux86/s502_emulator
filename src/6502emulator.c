@@ -6,10 +6,6 @@
 
 #include "./6502emulator.h"
 
-#define MAX_U8     0xFF
-#define MAX_OFFSET MAX_U8
-#define MAX_PAGES  MAX_U8
-
 // Global Variables
 Memory memory[MAX_PAGES][MAX_OFFSET] = {0X00}; // Memory Layout
 u8 stack_size = 0x00; // We wanna Track the stack Size
@@ -25,6 +21,8 @@ PSR processor_status_register = 0x00;
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode);
 const char *s502_opcode_as_cstr(Opcode opcode);
 const char *s502_operand_type_as_cstr(Operand_Type type);
+
+#define ARRAY_LEN(xs) (sizeof(xs) / sizeof(xs[0]))
 
 #define UNIMPLEMENTED(message)                                         \
     do {                                                               \
@@ -91,7 +89,7 @@ void s502_dump_memory()
 // NOTE: Print Stats
 void s502_print_stats()
 {
-    printf("Stack       : %u\n", stack[stack_size]);
+    printf("Stack       : %u\n", stack_size);
     printf("Register_X  : %u\n", X);
     printf("Register_Y  : %u\n", Y);
     printf("Accumulator : %u\n", accumulator);
@@ -484,13 +482,28 @@ bool s502_decode(Instruction instruction)
 
 int main(void)
 {
-    u16 data = 0x1234;
-    Location location = u16_to_loc(data);
+    s502_write_memory(u16_to_loc(0x1234), 0xA);
+    s502_write_memory(u16_to_loc(0x1235), 0xB);
 
-    s502_write_memory(location, 0x0A);
-    Instruction instruction = {
-        .mode = ABSOLUTE,
+    Instruction instruction1 = {
+        .mode = IMPLICIT,
+        .opcode = CLC,
+    };
+
+    Instruction instruction2 = {
+        .mode = IMMEDIATE,
         .opcode = LDA,
+        .operand = {
+            .type = OPERAND_DATA,
+            .data = {
+                .data = 0x00,
+            }
+        }
+    };
+
+    Instruction instruction3 = {
+        .mode = ABSOLUTE,
+        .opcode = ADC,
         .operand = {
             .type = OPERAND_ABSOLUTE,
             .data = {
@@ -501,11 +514,52 @@ int main(void)
         }
     };
 
-    if (!s502_decode(instruction)) {
-        fprintf(stderr, "Failed to decode\n");
-        return 1;
+
+    Instruction instruction4 = {
+        .mode = ABSOLUTE,
+        .opcode = ADC,
+        .operand = {
+            .type = OPERAND_ABSOLUTE,
+            .data = {
+                .address = {
+                    .absolute = 0x1235
+                },
+            }
+        }
+    };
+
+    Instruction instruction5 = {
+        .mode = ZERO_PAGE,
+        .opcode = STA,
+        .operand = {
+            .type = OPERAND_LOCATION,
+            .data = {
+                .address = {
+                    .loc = {.page = 0x00, .offset = 0xFF},
+                },
+            }
+        }
+    };
+
+    Instruction instructions[] = {
+        instruction1,
+        instruction2,
+        instruction3,
+        instruction4,
+        instruction5
+    };
+
+    u8 n = 0;
+
+    while (n < ARRAY_LEN(instructions)) {
+        if (!s502_decode(instructions[n])) {
+            fprintf(stderr, "Failed to decode\n");
+            return 1;
+        }
+        n++;
     }
 
     s502_print_stats();
+    s502_dump_page(memory[0x00]);
     return 0;
 }
