@@ -157,12 +157,20 @@ void s502_clear_psr_flags(PSR_Flags flags)
     processor_status_register &= flags;
 }
 
-void s502_set_accumulator(u8 data)
+void load_accumulator(u8 data)
 {
     accumulator = data;
-    if (accumulator == 0)        s502_set_psr_flags(Z_BIT_FLAG);
-    if ((accumulator << 7) != 0) s502_set_psr_flags(N_BIT_FLAG);
-    program_counter++;
+    if (accumulator == 0) {
+        s502_set_psr_flags(Z_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(Z_BIT_FLAG);
+    }
+
+    if (accumulator & N_BIT_FLAG) {
+        s502_set_psr_flags(N_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(N_BIT_FLAG);
+    }
 }
 
 Location u16_to_loc(u16 sixteen_bit)
@@ -174,6 +182,7 @@ Location u16_to_loc(u16 sixteen_bit)
     };
 }
 
+// M = A, memory into Accumulator
 void s502_load_accumulator(Instruction instruction)
 {
     switch (instruction.mode) {
@@ -182,7 +191,7 @@ void s502_load_accumulator(Instruction instruction)
         switch (instruction.operand.type) {
         case OPERAND_DATA: {
             u8 data = instruction.operand.data.data;
-            s502_set_accumulator(data);
+            load_accumulator(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
         }
@@ -195,7 +204,7 @@ void s502_load_accumulator(Instruction instruction)
             Location location = instruction.operand.data.address.loc;
             assert(location.page == 0x00 && "Invalid Page Zero Address");
             u8 data = s502_read_memory(location);
-            s502_set_accumulator(data);
+            load_accumulator(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
         }
@@ -203,14 +212,14 @@ void s502_load_accumulator(Instruction instruction)
 
     case ZERO_PAGE_X: {
         // zero page X modes sums x register to the zero page operand and uses it as index
-        // It wraps around incase it exceeds page MAX_CAPACITY_OF_EACH_PAGE
+        // It wraps around incase it exceeds page MAX_OFFSET
         switch (instruction.operand.type) {
         case OPERAND_LOCATION: {
             Location location = instruction.operand.data.address.loc;
             assert(location.page == 0x00 && "Invalid Page Zero Address");
             Location new_loc = { .offset = location.offset + X, .page = location.page};
             u8 data = s502_read_memory(new_loc);
-            s502_set_accumulator(data);
+            load_accumulator(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
         }
@@ -223,7 +232,7 @@ void s502_load_accumulator(Instruction instruction)
             Absolute absolute = instruction.operand.data.address.absolute;
             Location location = u16_to_loc(absolute);
             u8 data = s502_read_memory(location);
-            s502_set_accumulator(data);
+            load_accumulator(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
         }
@@ -237,7 +246,7 @@ void s502_load_accumulator(Instruction instruction)
             Absolute index = absolute + X;
             Location location = u16_to_loc(index);
             u8 data = s502_read_memory(location);
-            s502_set_accumulator(data);
+            load_accumulator(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
         }
@@ -251,7 +260,7 @@ void s502_load_accumulator(Instruction instruction)
             Absolute index = absolute + Y;
             Location location = u16_to_loc(index);
             u8 data = s502_read_memory(location);
-            s502_set_accumulator(data);
+            load_accumulator(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
         }
@@ -273,7 +282,7 @@ void s502_load_accumulator(Instruction instruction)
                 .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
             };
             u8 data = s502_read_memory(final);
-            s502_set_accumulator(data);
+            load_accumulator(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
         }
@@ -293,7 +302,7 @@ void s502_load_accumulator(Instruction instruction)
             };
             final.offset += Y; // final Address that contains the data
             u8 data = s502_read_memory(final);
-            s502_set_accumulator(data);
+            load_accumulator(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
         }
@@ -303,6 +312,117 @@ void s502_load_accumulator(Instruction instruction)
     }
 }
 
+// A = M, store accumulator into memory
+void s502_store_accumulator(Instruction instruction)
+{
+    switch (instruction.mode) {
+    case ZERO_PAGE: {
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            // if the operand doesn't contain any page, assumed that it is page zero
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Page Zero Address");
+            s502_write_memory(location, accumulator);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case ZERO_PAGE_X: {
+        // zero page X modes sums x register to the zero page operand and uses it as index
+        // It wraps around incase it exceeds page MAX_OFFSET
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Page Zero Address");
+            Location new_loc = { .offset = location.offset + X, .page = location.page};
+            s502_write_memory(new_loc, accumulator);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case ABSOLUTE: {
+        // uses the absolute location in operand to load access memory into accumulator
+        switch (instruction.operand.type) {
+        case OPERAND_ABSOLUTE: {
+            Absolute absolute = instruction.operand.data.address.absolute;
+            Location location = u16_to_loc(absolute);
+            s502_write_memory(location, accumulator);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case ABSOLUTE_X: {
+        // absolute but += X register
+        switch (instruction.operand.type) {
+        case OPERAND_ABSOLUTE: {
+            Absolute absolute = instruction.operand.data.address.absolute;
+            Absolute index = absolute + X;
+            Location location = u16_to_loc(index);
+            s502_write_memory(location, accumulator);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case ABSOLUTE_Y: {
+        // absolute but += Y register
+        switch (instruction.operand.type) {
+        case OPERAND_ABSOLUTE: {
+            Absolute absolute = instruction.operand.data.address.absolute;
+            Absolute index = absolute + Y;
+            Location location = u16_to_loc(index);
+            s502_write_memory(location, accumulator);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case INDEXED_INDIRECT: {
+        // Adds X register to the offset of the location in the instruction
+        // Fetches the data pointed by the modified location
+        // Uses that data as a new location to index into memory and fetches low-byte
+        // Uses the modified location.offset + 1 to index into memory and fetches high-byte
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            Location new_loc   = {.offset = location.offset + X, .page = location.page};
+            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
+            Location final = {
+                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
+                .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
+            };
+            s502_write_memory(final, accumulator);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case INDIRECT_INDEXED: {
+        // same as index indirect but the addition of the Y register occurs in the final address
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            Location new_loc   = {.offset = location.offset    , .page = location.page};
+            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
+            Location final = {
+                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
+                .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
+            };
+            final.offset += Y; // final Address that contains the data
+            s502_write_memory(final, accumulator);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    default: ILLEGAL_ADDRESSING(instruction.mode, instruction.opcode);
+    }
+}
 
 void add_with_carry(u8 data)
 {
@@ -356,13 +476,96 @@ void s502_add_with_carry(Instruction instruction)
 
     case ZERO_PAGE_X: {
         // zero page X modes sums x register to the zero page operand and uses it as index
-        // It wraps around incase it exceeds page MAX_CAPACITY_OF_EACH_PAGE
+        // It wraps around incase it exceeds page MAX_OFFSET
         switch (instruction.operand.type) {
         case OPERAND_LOCATION: {
             Location location = instruction.operand.data.address.loc;
             assert(location.page == 0x00 && "Invalid Page Zero Address");
             Location new_loc = {.offset = location.offset + X, .page = location.page};
             u8 data = s502_read_memory(new_loc);
+            add_with_carry(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case ABSOLUTE: {
+        // uses the absolute location in operand to load memory into data and add accumulator
+        switch (instruction.operand.type) {
+        case OPERAND_ABSOLUTE: {
+            Absolute absolute = instruction.operand.data.address.absolute;
+            Location location = u16_to_loc(absolute);
+            u8 data = s502_read_memory(location);
+            add_with_carry(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case ABSOLUTE_X: {
+        // absolute but += X register
+        switch (instruction.operand.type) {
+        case OPERAND_ABSOLUTE: {
+            Absolute absolute = instruction.operand.data.address.absolute;
+            Absolute index = absolute + X;
+            Location location = u16_to_loc(index);
+            u8 data = s502_read_memory(location);
+            add_with_carry(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case ABSOLUTE_Y: {
+        // absolute but += Y register
+        switch (instruction.operand.type) {
+        case OPERAND_ABSOLUTE: {
+            Absolute absolute = instruction.operand.data.address.absolute;
+            Absolute index = absolute + Y;
+            Location location = u16_to_loc(index);
+            u8 data = s502_read_memory(location);
+            add_with_carry(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case INDEXED_INDIRECT: {
+        // Adds X register to the offset of the location in the instruction
+        // Fetches the data pointed by the modified location
+        // Uses that data as a new location to index into memory and fetches low-byte
+        // Uses the modified location.offset + 1 to index into memory and fetches high-byte
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            Location new_loc   = {.offset = location.offset + X, .page = location.page};
+            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
+            Location final = {
+                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
+                .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
+            };
+            u8 data = s502_read_memory(final);
+            add_with_carry(data);
+        } break;
+        default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
+        }
+    } break;
+
+    case INDIRECT_INDEXED: {
+        // same as index indirect but the addition of the Y register occurs in the final address
+        switch (instruction.operand.type) {
+        case OPERAND_LOCATION: {
+            Location location = instruction.operand.data.address.loc;
+            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            Location new_loc   = {.offset = location.offset    , .page = location.page};
+            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
+            Location final = {
+                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
+                .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
+            };
+            final.offset += Y; // final Address that contains the data
+            u8 data = s502_read_memory(final);
             add_with_carry(data);
         } break;
         default: ILLEGAL_ACCESS(instruction.mode, instruction.operand.type);
@@ -383,10 +586,11 @@ void s502_break()
 bool s502_decode(Instruction instruction)
 {
     switch (instruction.opcode) {
-    case CLC: s502_clear_psr_flags(C_BIT_FLAG);   return true;
-    case LDA: s502_load_accumulator(instruction); return true;
-    case ADC: s502_add_with_carry(instruction);   return true;
-    default:                                      return false;
+    case CLC: s502_clear_psr_flags(C_BIT_FLAG);    return true;
+    case LDA: s502_load_accumulator(instruction);  return true;
+    case ADC: s502_add_with_carry(instruction);    return true;
+    case STA: s502_store_accumulator(instruction); return true;
+    default:                                       return false;
     }
 }
 
@@ -413,6 +617,7 @@ int main(void)
         fprintf(stderr, "Failed to decode\n");
         return 1;
     }
+
     s502_print_stats();
     return 0;
 }
