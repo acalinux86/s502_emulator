@@ -49,6 +49,10 @@ typedef enum {
     CLC,
 
     STA,
+
+    // Error Values
+    ERROR_FETCH_DATA,
+    ERROR_FETCH_LOCATION,
 } Opcode;
 
 typedef u16 Absolute;
