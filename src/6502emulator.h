@@ -89,4 +89,8 @@ typedef struct {
     Operand operand;
 } Instruction;
 
+#define MAX_U8     0xFF
+#define MAX_OFFSET MAX_U8
+#define MAX_PAGES  MAX_U8
+
 #endif // EMULATOR_6502_H_
