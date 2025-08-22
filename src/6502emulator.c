@@ -459,6 +459,20 @@ void s502_store_accumulator(Instruction instruction)
     s502_write_memory(loc, accumulator); // Write Accumulator to memory
 }
 
+// M = Y, store accumulator into memory
+void s502_store_y_register(Instruction instruction)
+{
+    Location loc = s502_fetch_operand_location(instruction.mode, instruction.operand);
+    s502_write_memory(loc, Y); // Write Y to memory
+}
+
+// M = X, store accumulator into memory
+void s502_store_x_register(Instruction instruction)
+{
+    Location loc = s502_fetch_operand_location(instruction.mode, instruction.operand);
+    s502_write_memory(loc, X); // Write X to memory
+}
+
 void s502_add_with_carry(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
@@ -496,10 +510,12 @@ bool s502_decode(Instruction instruction)
 {
     switch (instruction.opcode) {
     case LDA: s502_load_accumulator(instruction);  return true;
-    case LDY: s502_load_y_register(instruction);  return true;
-    case LDX: s502_load_x_register(instruction);  return true;
+    case LDY: s502_load_y_register(instruction);   return true;
+    case LDX: s502_load_x_register(instruction);   return true;
 
     case STA: s502_store_accumulator(instruction); return true;
+    case STY: s502_store_y_register(instruction);  return true;
+    case STX: s502_store_x_register(instruction);  return true;
 
     case CLC: s502_clear_psr_flags(C_BIT_FLAG);    return true;
     case ADC: s502_add_with_carry(instruction);    return true;
