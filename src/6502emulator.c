@@ -163,22 +163,6 @@ void s502_clear_psr_flags(PSR_Flags flags)
     processor_status_register &= flags;
 }
 
-void load_accumulator(u8 data)
-{
-    accumulator = data;
-    if (accumulator == 0) {
-        s502_set_psr_flags(Z_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(Z_BIT_FLAG);
-    }
-
-    if (accumulator & N_BIT_FLAG) {
-        s502_set_psr_flags(N_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(N_BIT_FLAG);
-    }
-}
-
 Location u16_to_loc(u16 sixteen_bit)
 {
     // -- little-endian
@@ -417,22 +401,67 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
     UNREACHABLE("s502_fetch_operand_location");
 }
 
-// M = A, memory into Accumulator
+// A, Z , N = M, memory into Accumulator
 void s502_load_accumulator(Instruction instruction)
 {
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    load_accumulator(data);
+    accumulator = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (accumulator == 0) {
+        s502_set_psr_flags(Z_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(Z_BIT_FLAG);
+    }
+
+    if (accumulator & N_BIT_FLAG) {
+        s502_set_psr_flags(N_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(N_BIT_FLAG);
+    }
 }
 
-// A = M, store accumulator into memory
+// X,Z,N = M
+void s502_load_x_register(Instruction instruction)
+{
+    X = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (X == 0) {
+        s502_set_psr_flags(Z_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(Z_BIT_FLAG);
+    }
+
+    if (X & N_BIT_FLAG) {
+        s502_set_psr_flags(N_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(N_BIT_FLAG);
+    }
+}
+
+// Y,Z,N =  M
+void s502_load_y_register(Instruction instruction)
+{
+    Y = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (Y == 0) {
+        s502_set_psr_flags(Z_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(Z_BIT_FLAG);
+    }
+
+    if (Y & N_BIT_FLAG) {
+        s502_set_psr_flags(N_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(N_BIT_FLAG);
+    }
+}
+
+// M = A, store accumulator into memory
 void s502_store_accumulator(Instruction instruction)
 {
     Location loc = s502_fetch_operand_location(instruction.mode, instruction.operand);
-    s502_write_memory(loc, accumulator);
+    s502_write_memory(loc, accumulator); // Write Accumulator to memory
 }
 
-void add_with_carry(u8 data)
+void s502_add_with_carry(Instruction instruction)
 {
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
     u16 raw = data + accumulator + (processor_status_register & C_BIT_FLAG);
     u8 result = (u8) raw;
     if (result == 0) {
@@ -456,12 +485,6 @@ void add_with_carry(u8 data)
     accumulator = result;
 }
 
-void s502_add_with_carry(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    add_with_carry(data);
-}
-
 void s502_break()
 {
     s502_set_psr_flags(B_BIT_FLAG);
@@ -472,13 +495,19 @@ void s502_break()
 bool s502_decode(Instruction instruction)
 {
     switch (instruction.opcode) {
-    case CLC: s502_clear_psr_flags(C_BIT_FLAG);    return true;
     case LDA: s502_load_accumulator(instruction);  return true;
-    case ADC: s502_add_with_carry(instruction);    return true;
+    case LDY: s502_load_y_register(instruction);  return true;
+    case LDX: s502_load_x_register(instruction);  return true;
+
     case STA: s502_store_accumulator(instruction); return true;
+
+    case CLC: s502_clear_psr_flags(C_BIT_FLAG);    return true;
+    case ADC: s502_add_with_carry(instruction);    return true;
     default:                                       return false;
     }
 }
+
+// TODO: Implement Load Operations
 
 int main(void)
 {
