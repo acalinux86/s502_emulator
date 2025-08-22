@@ -473,6 +473,74 @@ void s502_store_x_register(Instruction instruction)
     s502_write_memory(loc, X); // Write X to memory
 }
 
+// A = X, transfer X to A, TXA
+void s502_transfer_x_to_accumulator()
+{
+    accumulator = X;
+    if (accumulator == 0) {
+        s502_set_psr_flags(Z_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(Z_BIT_FLAG);
+    }
+
+    if (accumulator & N_BIT_FLAG) {
+        s502_set_psr_flags(N_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(N_BIT_FLAG);
+    }
+}
+
+// A = Y, transfer Y to A, TYA
+void s502_transfer_y_to_accumulator()
+{
+    accumulator = Y;
+    if (accumulator == 0) {
+        s502_set_psr_flags(Z_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(Z_BIT_FLAG);
+    }
+
+    if (accumulator & N_BIT_FLAG) {
+        s502_set_psr_flags(N_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(N_BIT_FLAG);
+    }
+}
+
+// X = A, transfer Accumulator to X, TAX
+void s502_transfer_accumulator_to_x()
+{
+    X = accumulator;
+    if (X == 0) {
+        s502_set_psr_flags(Z_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(Z_BIT_FLAG);
+    }
+
+    if (X & N_BIT_FLAG) {
+        s502_set_psr_flags(N_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(N_BIT_FLAG);
+    }
+}
+
+// Y = A, transfer Accumulator to Y, TAY
+void s502_transfer_accumulator_to_y()
+{
+    Y = accumulator;
+    if (Y == 0) {
+        s502_set_psr_flags(Z_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(Z_BIT_FLAG);
+    }
+
+    if (Y & N_BIT_FLAG) {
+        s502_set_psr_flags(N_BIT_FLAG);
+    } else {
+        s502_clear_psr_flags(N_BIT_FLAG);
+    }
+}
+
 void s502_add_with_carry(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
@@ -516,6 +584,11 @@ bool s502_decode(Instruction instruction)
     case STA: s502_store_accumulator(instruction); return true;
     case STY: s502_store_y_register(instruction);  return true;
     case STX: s502_store_x_register(instruction);  return true;
+
+    case TXA: s502_transfer_x_to_accumulator();    return true;
+    case TYA: s502_transfer_y_to_accumulator();    return true;
+    case TAX: s502_transfer_accumulator_to_x();    return true;
+    case TAY: s502_transfer_accumulator_to_y();    return true;
 
     case CLC: s502_clear_psr_flags(C_BIT_FLAG);    return true;
     case ADC: s502_add_with_carry(instruction);    return true;
