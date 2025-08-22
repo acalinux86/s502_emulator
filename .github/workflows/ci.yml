@@ -1,6 +1,6 @@
 name: s502 Emulator (6502)
 
-on: [pull_request]
+on: [push, pull_request]
 
 jobs:
   build-and-run:
@@ -12,8 +12,9 @@ jobs:
 
       # 2. Install Build Essentials
       - name: Install Dependencies
-        run: sudo apt-get update
-        run: sudo apt-get install -y build-essential
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
 
       # 3. Compile the Program
       - name: Build the Emulator
