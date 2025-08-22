@@ -175,7 +175,7 @@ u8 *u16_bit_split(u16 sixteen_bit)
 // A must be the higher-byte and b the lower-byte
 u16 u8_bits_join(u8 a, u8 b)
 {
-    return result = (a << 8) | b[1];
+    return (a << 8) | b;
 }
 
 Location u16_to_loc(u16 sixteen_bit)
