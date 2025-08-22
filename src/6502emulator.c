@@ -16,7 +16,7 @@ u8 accumulator = 0x00;
 Register_X X = 0x00;
 Register_Y Y = 0x00;
 PC program_counter = 0x00;
-PSR processor_status_register = 0x00;
+PSR processor_status_register = 0x20; // Initialize with the unused bit
 
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode);
 const char *s502_opcode_as_cstr(Opcode opcode);
@@ -131,11 +131,61 @@ const char *s502_opcode_as_cstr(Opcode opcode)
 {
     switch (opcode) {
     case BRK:                  return "BRK";
+    case NOP:                  return "NOP";
+    case RTI:                  return "RTI";
     case RTS:                  return "RTS";
+    case JMP:                  return "JMP";
+    case JSR:                  return "JSR";
     case ADC:                  return "ADC";
+    case SBC:                  return "SBC";
+    case CMP:                  return "CMP";
+    case CPX:                  return "CPX";
+    case CPY:                  return "CPY";
     case LDA:                  return "LDA";
+    case LDY:                  return "LDY";
+    case LDX:                  return "LDX";
     case STA:                  return "STA";
+    case STY:                  return "STY";
+    case STX:                  return "STX";
     case CLC:                  return "CLC";
+    case CLV:                  return "CLV";
+    case CLI:                  return "CLI";
+    case CLD:                  return "CLD";
+    case SEC:                  return "SEC";
+    case SED:                  return "SED";
+    case SEI:                  return "SEI";
+    case ORA:                  return "ORA";
+    case AND:                  return "AND";
+    case EOR:                  return "EOR";
+    case BIT:                  return "BIT";
+    case TAX:                  return "TAX";
+    case TAY:                  return "TAY";
+    case TXA:                  return "TXA";
+    case TYA:                  return "TYA";
+    case TSX:                  return "TSX";
+    case TXS:                  return "TXS";
+    case PHA:                  return "PHA";
+    case PHP:                  return "PHP";
+    case PLA:                  return "PLA";
+    case PLP:                  return "PLP";
+    case INC:                  return "INC";
+    case INX:                  return "INX";
+    case INY:                  return "INY";
+    case DEX:                  return "DEX";
+    case DEY:                  return "DEY";
+    case DEC:                  return "DEC";
+    case BNE:                  return "BNE";
+    case BCC:                  return "BCC";
+    case BCS:                  return "BCS";
+    case BEQ:                  return "BEQ";
+    case BMI:                  return "BMI";
+    case BPL:                  return "BPL";
+    case BVC:                  return "BVC";
+    case BVS:                  return "BVS";
+    case ASL:                  return "ASL";
+    case LSR:                  return "LSR";
+    case ROL:                  return "ROL";
+    case ROR:                  return "ROR";
     case ERROR_FETCH_DATA:     return "ERROR_FETCH_DATA";
     case ERROR_FETCH_LOCATION: return "ERROR_FETCH_LOCATION";
     default:                   return NULL;
@@ -563,25 +613,94 @@ void s502_add_with_carry(Instruction instruction)
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
     u16 raw = data + accumulator + (processor_status_register & C_BIT_FLAG);
     u8 result = (u8) raw;
-    if (result == 0) {
-        s502_set_psr_flags(Z_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(Z_BIT_FLAG);
-    }
 
-    if (raw > MAX_U8) {
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+
+    s502_clear_psr_flags(C_BIT_FLAG);
+    if (raw > MAX_U8) s502_set_psr_flags(C_BIT_FLAG);
+
+    s502_clear_psr_flags(V_BIT_FLAG);
+    if (~(accumulator ^ data) & (accumulator ^ result) & 0x80) {
+        s502_set_psr_flags(V_BIT_FLAG);
+    }
+    accumulator = result;
+}
+
+void s502_sub_with_carry(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    u16 raw = accumulator + (~data) + (processor_status_register & C_BIT_FLAG);
+    u8 result = (u8) raw;
+
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+
+    s502_clear_psr_flags(C_BIT_FLAG);
+    if (raw > MAX_U8) s502_set_psr_flags(C_BIT_FLAG);
+
+    // NOTE: N_BIT_FLAG = 0x80
+    u8 sign_a = accumulator & N_BIT_FLAG;
+    u8 sign_data_inverted = (~data) & N_BIT_FLAG;
+    u8 sign_result = result & N_BIT_FLAG;
+
+    if ((sign_a == sign_data_inverted) & (sign_a != sign_result)) {
         s502_set_psr_flags(V_BIT_FLAG);
     } else {
         s502_clear_psr_flags(V_BIT_FLAG);
     }
-
-    if (result & N_BIT_FLAG) {
-        s502_set_psr_flags(N_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(N_BIT_FLAG);
-    }
-
     accumulator = result;
+}
+
+void s502_compare_accumulator_with_data(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    u8 result = accumulator + (~data);
+
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (data == accumulator) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(C_BIT_FLAG);
+    if (data >= accumulator) s502_set_psr_flags(C_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+}
+
+void s502_compare_x_register_with_data(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    u8 result = X + (~data);
+
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (data == X) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(C_BIT_FLAG);
+    if (data >= X) s502_set_psr_flags(C_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+}
+
+void s502_compare_y_register_with_data(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    u8 result = Y + (~data);
+
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (data == Y) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(C_BIT_FLAG);
+    if (data >= Y) s502_set_psr_flags(C_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
 void s502_break()
@@ -598,31 +717,35 @@ void s502_break()
 bool s502_decode(Instruction instruction)
 {
     switch (instruction.opcode) {
-    case LDA: s502_load_accumulator(instruction);  return true;
-    case LDY: s502_load_y_register(instruction);   return true;
-    case LDX: s502_load_x_register(instruction);   return true;
+    case LDA: s502_load_accumulator(instruction);              return true;
+    case LDY: s502_load_y_register(instruction);               return true;
+    case LDX: s502_load_x_register(instruction);               return true;
 
-    case STA: s502_store_accumulator(instruction); return true;
-    case STY: s502_store_y_register(instruction);  return true;
-    case STX: s502_store_x_register(instruction);  return true;
+    case STA: s502_store_accumulator(instruction);             return true;
+    case STY: s502_store_y_register(instruction);              return true;
+    case STX: s502_store_x_register(instruction);              return true;
 
-    case TXA: s502_transfer_x_to_accumulator();    return true;
-    case TYA: s502_transfer_y_to_accumulator();    return true;
-    case TAX: s502_transfer_accumulator_to_x();    return true;
-    case TAY: s502_transfer_accumulator_to_y();    return true;
+    case TXA: s502_transfer_x_to_accumulator();                return true;
+    case TYA: s502_transfer_y_to_accumulator();                return true;
+    case TAX: s502_transfer_accumulator_to_x();                return true;
+    case TAY: s502_transfer_accumulator_to_y();                return true;
 
-    case CLC: s502_clear_psr_flags(C_BIT_FLAG);    return true;
-    case CLD: s502_clear_psr_flags(D_BIT_FLAG);    return true;
-    case CLI: s502_clear_psr_flags(I_BIT_FLAG);    return true;
-    case CLV: s502_clear_psr_flags(V_BIT_FLAG);    return true;
-    case SEC: s502_set_psr_flags(C_BIT_FLAG);      return true;
-    case SED: s502_set_psr_flags(D_BIT_FLAG);      return true;
-    case SEI: s502_set_psr_flags(I_BIT_FLAG);      return true;
+    case CLC: s502_clear_psr_flags(C_BIT_FLAG);                return true;
+    case CLD: s502_clear_psr_flags(D_BIT_FLAG);                return true;
+    case CLI: s502_clear_psr_flags(I_BIT_FLAG);                return true;
+    case CLV: s502_clear_psr_flags(V_BIT_FLAG);                return true;
+    case SEC: s502_set_psr_flags(C_BIT_FLAG);                  return true;
+    case SED: s502_set_psr_flags(D_BIT_FLAG);                  return true;
+    case SEI: s502_set_psr_flags(I_BIT_FLAG);                  return true;
 
-    case BRK: s502_break();                        return true;
+    case ADC: s502_add_with_carry(instruction);                return true;
+    case SBC: s502_sub_with_carry(instruction);                return true;
+    case CMP: s502_compare_accumulator_with_data(instruction); return true;
+    case CPX: s502_compare_x_register_with_data(instruction);  return true;
+    case CPY: s502_compare_y_register_with_data(instruction);  return true;
 
-    case ADC: s502_add_with_carry(instruction);    return true;
-    default:                                       return false;
+    case BRK: s502_break();                                    return true;
+    default:                                                   return false;
     }
 }
 
@@ -706,6 +829,5 @@ int main(void)
     }
 
     s502_print_stats();
-    s502_dump_page(memory[0x00]);
     return 0;
 }
