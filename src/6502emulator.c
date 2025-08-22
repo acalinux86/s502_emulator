@@ -163,13 +163,30 @@ void s502_clear_psr_flags(PSR_Flags flags)
     processor_status_register &= flags;
 }
 
+u8 *u16_bit_split(u16 sixteen_bit)
+{
+    u8 *array = (u8*)calloc(2, sizeof(u8));
+    assert(array != NULL);
+    array[0] = sixteen_bit >> 8; // higher byte
+    array[1] = sixteen_bit & 0xFF; // low-byte
+    return array; // Memory Leak
+}
+
+// A must be the higher-byte and b the lower-byte
+u16 u8_bits_join(u8 a, u8 b)
+{
+    return (a << 8) | b;
+}
+
 Location u16_to_loc(u16 sixteen_bit)
 {
-    // -- little-endian
-    return (Location) {
-        .page = sixteen_bit >> 8, // higher byte
-        .offset = sixteen_bit & 0xFF, // low-byte
+    u8 *array = u16_bit_split(sixteen_bit);
+    Location loc = {
+        .page = array[0], // higher byte
+        .offset = array[1], // low-byte
     };
+    free(array); // Free Array
+    return loc;
 }
 
 // Returns data for read opcodes
@@ -570,7 +587,11 @@ void s502_add_with_carry(Instruction instruction)
 void s502_break()
 {
     s502_set_psr_flags(B_BIT_FLAG);
-    program_counter = 0xFFFF;
+    u8 *program_counter_array = u16_bit_split(program_counter); // Split the Program Counter
+    s502_push_stack(program_counter_array[0]); // Push higher-byte first
+    s502_push_stack(program_counter_array[1]); // Push lower-byte second
+    s502_push_stack(processor_status_register); // Push the Process Status register
+    program_counter = 0xFFFF; // load the Interrupt Vector into the Program Counter
     printf("Program Interrupted\n");
 }
 
@@ -591,12 +612,19 @@ bool s502_decode(Instruction instruction)
     case TAY: s502_transfer_accumulator_to_y();    return true;
 
     case CLC: s502_clear_psr_flags(C_BIT_FLAG);    return true;
+    case CLD: s502_clear_psr_flags(D_BIT_FLAG);    return true;
+    case CLI: s502_clear_psr_flags(I_BIT_FLAG);    return true;
+    case CLV: s502_clear_psr_flags(V_BIT_FLAG);    return true;
+    case SEC: s502_set_psr_flags(C_BIT_FLAG);      return true;
+    case SED: s502_set_psr_flags(D_BIT_FLAG);      return true;
+    case SEI: s502_set_psr_flags(I_BIT_FLAG);      return true;
+
+    case BRK: s502_break();                        return true;
+
     case ADC: s502_add_with_carry(instruction);    return true;
     default:                                       return false;
     }
 }
-
-// TODO: Implement Load Operations
 
 int main(void)
 {
