@@ -661,13 +661,13 @@ void s502_sub_with_carry(Instruction instruction)
 void s502_compare_accumulator_with_data(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u8 result = accumulator + (~data);
+    u16 result = accumulator - data;
 
     s502_clear_psr_flags(Z_BIT_FLAG);
-    if (data == accumulator) s502_set_psr_flags(Z_BIT_FLAG);
+    if (accumulator == data) s502_set_psr_flags(Z_BIT_FLAG);
 
     s502_clear_psr_flags(C_BIT_FLAG);
-    if (data >= accumulator) s502_set_psr_flags(C_BIT_FLAG);
+    if (accumulator >= data) s502_set_psr_flags(C_BIT_FLAG);
 
     s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
@@ -676,13 +676,13 @@ void s502_compare_accumulator_with_data(Instruction instruction)
 void s502_compare_x_register_with_data(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u8 result = X + (~data);
+    u16 result = X - data;
 
     s502_clear_psr_flags(Z_BIT_FLAG);
-    if (data == X) s502_set_psr_flags(Z_BIT_FLAG);
+    if (X == data) s502_set_psr_flags(Z_BIT_FLAG);
 
     s502_clear_psr_flags(C_BIT_FLAG);
-    if (data >= X) s502_set_psr_flags(C_BIT_FLAG);
+    if (X >= data) s502_set_psr_flags(C_BIT_FLAG);
 
     s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
@@ -691,13 +691,13 @@ void s502_compare_x_register_with_data(Instruction instruction)
 void s502_compare_y_register_with_data(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u8 result = Y + (~data);
+    u16 result = Y - data;
 
     s502_clear_psr_flags(Z_BIT_FLAG);
-    if (data == Y) s502_set_psr_flags(Z_BIT_FLAG);
+    if (Y == data) s502_set_psr_flags(Z_BIT_FLAG);
 
     s502_clear_psr_flags(C_BIT_FLAG);
-    if (data >= Y) s502_set_psr_flags(C_BIT_FLAG);
+    if (Y >= data) s502_set_psr_flags(C_BIT_FLAG);
 
     s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
