@@ -27,13 +27,13 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
 #define UNIMPLEMENTED(message)                                         \
     do {                                                               \
         fprintf(stderr, "ERROR: %s not implement yet!!!\n", message) ; \
-        exit(1);                                                       \
+        abort();                                                       \
     } while (0)
 
 #define UNREACHABLE(message)                                        \
     do {                                                            \
         fprintf(stderr, "ERROR: `%s` unreachable!!!!\n", message);  \
-        exit(1);                                                    \
+        abort();                                                    \
     } while (0)
 
 #define ILLEGAL_ADDRESSING(mode, opcode)                    \
@@ -41,7 +41,7 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
         fprintf(stderr, "ERROR: Invalid `%s` mode on %s\n", \
                 s502_addr_mode_as_cstr(mode),               \
                 s502_opcode_as_cstr(opcode));               \
-        exit(1);                                            \
+        abort();                                            \
     } while (0)
 
 #define ILLEGAL_ACCESS(mode, operand)                                   \
@@ -50,6 +50,7 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
         fprintf(stderr, "ERROR: Invalid `%s` type on `%s` mode. \n",    \
                 s502_operand_type_as_cstr(operand),                     \
                 s502_addr_mode_as_cstr(mode));                          \
+        abort();                                                       \
     } while (0)
 
 void s502_dump_page(u8 *page)
@@ -249,6 +250,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         case OPERAND_DATA: {
             return operand.data.data;
         }
+        case OPERAND_ABSOLUTE:
+        case OPERAND_LOCATION:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -261,6 +264,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
             assert(location.page == 0x00 && "Invalid Page Zero Address");
             return s502_read_memory(location);
         }
+        case OPERAND_ABSOLUTE:
+        case OPERAND_DATA:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -275,6 +280,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
             Location new_loc = { .offset = location.offset + X, .page = location.page};
             return s502_read_memory(new_loc);
         }
+        case OPERAND_ABSOLUTE:
+        case OPERAND_DATA:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -287,6 +294,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
             Location location = u16_to_loc(absolute);
             return s502_read_memory(location);
         }
+        case OPERAND_DATA:
+        case OPERAND_LOCATION:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -300,6 +309,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
             Location location = u16_to_loc(index);
             return s502_read_memory(location);
         }
+        case OPERAND_DATA:
+        case OPERAND_LOCATION:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -313,6 +324,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
             Location location = u16_to_loc(index);
             return s502_read_memory(location);
         }
+        case OPERAND_DATA:
+        case OPERAND_LOCATION:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -334,6 +347,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
             };
             return s502_read_memory(final);
         }
+        case OPERAND_ABSOLUTE:
+        case OPERAND_DATA:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -353,10 +368,16 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
             final.offset += Y; // final Address that contains the data
             return s502_read_memory(final);
         }
+        case OPERAND_ABSOLUTE:
+        case OPERAND_DATA:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
-
+    case IMPL:
+    case ACCU:
+    case ZPY:
+    case REL:
+    case IND:
     default: ILLEGAL_ADDRESSING(mode, ERROR_FETCH_DATA);
     }
     UNREACHABLE("s502_fetch_operand_data");
@@ -372,6 +393,8 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
             // if the operand doesn't contain any page, assumed that it is page zero
             return operand.data.address.loc;
         }
+        case OPERAND_ABSOLUTE:
+        case OPERAND_DATA:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -385,6 +408,8 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
             assert(location.page == 0x00 && "Invalid Page Zero Address");
             return (Location) { .offset = location.offset + X, .page = location.page};
         }
+        case OPERAND_ABSOLUTE:
+        case OPERAND_DATA:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -396,6 +421,8 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
             Absolute absolute = operand.data.address.absolute;
             return u16_to_loc(absolute);
         }
+        case OPERAND_DATA:
+        case OPERAND_LOCATION:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -408,6 +435,8 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
             Absolute index = absolute + X;
             return u16_to_loc(index);
         }
+        case OPERAND_DATA:
+        case OPERAND_LOCATION:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -420,6 +449,8 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
             Absolute index = absolute + Y;
             return u16_to_loc(index);
         }
+        case OPERAND_DATA:
+        case OPERAND_LOCATION:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -440,6 +471,8 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
                 .page   = s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
             };
         }
+        case OPERAND_ABSOLUTE:
+        case OPERAND_DATA:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -459,10 +492,18 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
             final.offset += Y; // final Address that contains the data
             return final;
         }
+        case OPERAND_ABSOLUTE:
+        case OPERAND_DATA:
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
+    case IMME:
+    case IMPL:
+    case ACCU:
+    case ZPY:
+    case REL:
+    case IND:
     default: ILLEGAL_ADDRESSING(mode, ERROR_FETCH_LOCATION);
     }
     UNREACHABLE("s502_fetch_operand_location");
@@ -745,7 +786,44 @@ bool s502_decode(Instruction instruction)
     case CPY: s502_compare_y_register_with_data(instruction);  return true;
 
     case BRK: s502_break();                                    return true;
-    default:                                                   return false;
+
+    case NOP: UNIMPLEMENTED("NOP");
+    case RTI: UNIMPLEMENTED("RTI");
+    case RTS: UNIMPLEMENTED("RTS");
+    case JMP: UNIMPLEMENTED("JMP");
+    case JSR: UNIMPLEMENTED("JSR");
+    case ORA: UNIMPLEMENTED("ORA");
+    case AND: UNIMPLEMENTED("AND");
+    case EOR: UNIMPLEMENTED("EOR");
+    case BIT: UNIMPLEMENTED("BIT");
+    case TSX: UNIMPLEMENTED("TSX");
+    case TXS: UNIMPLEMENTED("TXS");
+    case PHA: UNIMPLEMENTED("PHA");
+    case PHP: UNIMPLEMENTED("PHP");
+    case PLA: UNIMPLEMENTED("PLA");
+    case PLP: UNIMPLEMENTED("PLP");
+    case INC: UNIMPLEMENTED("INC");
+    case INX: UNIMPLEMENTED("INX");
+    case INY: UNIMPLEMENTED("INY");
+    case DEX: UNIMPLEMENTED("DEX");
+    case DEY: UNIMPLEMENTED("DEY");
+    case DEC: UNIMPLEMENTED("DEC");
+    case BNE: UNIMPLEMENTED("BNE");
+    case BCC: UNIMPLEMENTED("BCC");
+    case BCS: UNIMPLEMENTED("BCS");
+    case BEQ: UNIMPLEMENTED("BEQ");
+    case BMI: UNIMPLEMENTED("BMI");
+    case BPL: UNIMPLEMENTED("BPL");
+    case BVC: UNIMPLEMENTED("BVC");
+    case BVS: UNIMPLEMENTED("BVS");
+    case ASL: UNIMPLEMENTED("ASL");
+    case LSR: UNIMPLEMENTED("LSR");
+    case ROL: UNIMPLEMENTED("ROL");
+    case ROR: UNIMPLEMENTED("ROR");
+    case ERROR_FETCH_DATA: UNREACHABLE("ERROR_FETCH_DATA");
+    case ERROR_FETCH_LOCATION: UNREACHABLE("ERROR_FETCH_LOCATION");
+    default:
+        return false;
     }
 }
 

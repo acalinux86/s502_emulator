@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall -Werror -Wextra -Wno-switch-enum -std=c17 -pedantic -ggdb
+CFLAGS= -Wall -Werror -Wextra -Wswitch-enum -std=c17 -pedantic -ggdb
 
 .PHONY: all clean
 all: build/6502emulator
