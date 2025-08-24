@@ -3,7 +3,10 @@
 
 typedef uint8_t  u8;
 typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
 
+typedef int32_t i32;
 // Registers
 typedef u8 Stack;
 typedef u8 Register_X;
@@ -181,7 +184,7 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
 
 #define UNIMPLEMENTED(message)                                          \
     do {                                                                \
-        fprintf(stderr, "ERROR: %s not implement yet!!!\n", message) ;  \
+        fprintf(stderr, "ERROR: %s not implemented yet!!!\n", message) ;  \
         abort();                                                        \
     } while (0)
 

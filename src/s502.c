@@ -199,16 +199,13 @@ void s502_clear_psr_flags(PSR_Flags flags)
     processor_status_register &= flags;
 }
 
-u8 *u16_bit_split(u16 sixteen_bit)
+void u16_byte_split(u16 sixteen_bit, u8 *high_byte, u8 *low_byte)
 {
-    u8 *array = (u8*)calloc(2, sizeof(u8));
-    assert(array != NULL);
-    array[0] = sixteen_bit >> 8; // higher byte
-    array[1] = sixteen_bit & 0xFF; // low-byte
-    return array; // Memory Leak
+    *high_byte = sixteen_bit >> 8; // higher byte
+    *low_byte  = sixteen_bit & 0xFF; // low-byte
 }
 
-// A must be the higher-byte and b the lower-byte
+// a must be the higher-byte and b the lower-byte
 u16 u8_bits_join(u8 a, u8 b)
 {
     return (a << 8) | b;
@@ -216,12 +213,12 @@ u16 u8_bits_join(u8 a, u8 b)
 
 Location u16_to_loc(u16 sixteen_bit)
 {
-    u8 *array = u16_bit_split(sixteen_bit);
+    u8 high_byte, low_byte;
+    u16_byte_split(sixteen_bit, &high_byte, &low_byte);
     Location loc = {
-        .page = array[0], // higher byte
-        .offset = array[1], // low-byte
+        .page = high_byte, // higher byte
+        .offset = low_byte, // low-byte
     };
-    free(array); // Free Array
     return loc;
 }
 
@@ -732,10 +729,12 @@ void s502_compare_y_register_with_data(Instruction instruction)
 void s502_break()
 {
     s502_set_psr_flags(B_BIT_FLAG);
-    u8 *program_counter_array = u16_bit_split(program_counter); // Split the Program Counter
-    s502_push_stack(program_counter_array[0]); // Push higher-byte first
-    s502_push_stack(program_counter_array[1]); // Push lower-byte second
+    u8 pc_high_byte, pc_low_byte;
+    u16_byte_split(program_counter, &pc_high_byte, &pc_low_byte); // Split the Program Counter
+    s502_push_stack(pc_high_byte); // Push higher-byte first
+    s502_push_stack(pc_low_byte); // Push lower-byte second
     s502_push_stack(processor_status_register); // Push the Process Status register
+    // TODO: Make the Interrupt vector a const variable
     program_counter = 0xFFFF; // load the Interrupt Vector into the Program Counter
     printf("Program Interrupted\n");
 }
