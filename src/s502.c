@@ -199,7 +199,7 @@ void s502_clear_psr_flags(PSR_Flags flags)
     processor_status_register &= flags;
 }
 
-void u16_bit_split(u16 sixteen_bit, u8 *high_byte,, u8 *low_byte)
+void u16_byte_split(u16 sixteen_bit, u8 *high_byte, u8 *low_byte)
 {
     *high_byte = sixteen_bit >> 8; // higher byte
     *low_byte  = sixteen_bit & 0xFF; // low-byte
@@ -214,7 +214,7 @@ u16 u8_bits_join(u8 a, u8 b)
 Location u16_to_loc(u16 sixteen_bit)
 {
     u8 high_byte, low_byte;
-    u16_bit_split(sixteen_bit, &high_byte, &low_byte);
+    u16_byte_split(sixteen_bit, &high_byte, &low_byte);
     Location loc = {
         .page = high_byte, // higher byte
         .offset = low_byte, // low-byte
