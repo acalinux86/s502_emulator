@@ -26,17 +26,7 @@ Opcode_Info opcode_matrix[MAX_U8 + 1] = {
     {BEQ, REL} ,  {SBC, INDY},        {0x00},        {0x00},        {0x00}, {SBC, ZPX}, {INC, ZPX},      {0x00},  {SED, IMPL}, {SBC, ABSY},        {0x00},        {0x00},      {0x00}, {SBC, ABSX},  {INC, ABSX},    {0x00}, // F-
 };
 
-// Global Variables
-Memory memory[MAX_PAGES][MAX_OFFSET] = {0X00}; // Memory Layout
-u8 stack_size = 0x00; // We wanna Track the stack Size
-Stack *stack = memory[0x01]; // Page 1
-
-// Registers
-u8 accumulator = 0x00;
-Register_X X = 0x00;
-Register_Y Y = 0x00;
-PC program_counter = 0x00;
-PSR processor_status_register = 0x20; // Initialize with the unused bit
+static CPU cpu = {0};
 
 void s502_dump_page(u8 *page)
 {
@@ -53,44 +43,40 @@ void s502_dump_page(u8 *page)
 void s502_push_stack(u8 value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
-    assert(stack_size < MAX_OFFSET - 1 && "Stack Overflow");
-    stack[stack_size] = value;
-    stack_size++;
+    cpu.memory[0x01][cpu.stack--] = value;
 }
 
 u8 s502_pull_stack()
 {
-    assert(stack_size > 0 && "Stack Underflow");
-    stack_size--;
-    return stack[stack_size];
+    return cpu.memory[0x01][cpu.stack++];
 }
 
 void s502_dump_memory()
 {
     for (u8 i = 0; i < MAX_PAGES; ++i) {
-        s502_dump_page(memory[i]);
+        s502_dump_page(cpu.memory[i]);
     }
 }
 
 // NOTE: Print Stats
 void s502_print_stats()
 {
-    printf("Stack       : %u\n", stack_size);
-    printf("Register_X  : %u\n", X);
-    printf("Register_Y  : %u\n", Y);
-    printf("Accumulator : %u\n", accumulator);
-    printf("PC          : %u\n", program_counter);
-    printf("PSR         : %u\n", processor_status_register);
+    printf("Stack       : %u\n", cpu.stack);
+    printf("X           : %u\n", cpu.x);
+    printf("Y           : %u\n", cpu.y);
+    printf("Accumulator : %u\n", cpu.accumulator);
+    printf("PC          : %u\n", cpu.program_counter);
+    printf("PSR         : %u\n", cpu.status_register);
 }
 
 u8 s502_read_memory(Location location)
 {
-    return memory[location.page][location.offset];
+    return cpu.memory[location.page][location.offset];
 }
 
 void s502_write_memory(Location location, u8 data)
 {
-    memory[location.page][location.offset] = data;
+    cpu.memory[location.page][location.offset] = data;
 }
 
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode)
@@ -190,13 +176,13 @@ const char *s502_operand_type_as_cstr(Operand_Type type)
 // NOTE: Set PSR FLAGS
 void s502_set_psr_flags(PSR_Flags flags)
 {
-    processor_status_register |= flags;
+    cpu.status_register |= flags;
 }
 
 // NOTE: Clear PSR FLAGS
 void s502_clear_psr_flags(PSR_Flags flags)
 {
-    processor_status_register &= flags;
+    cpu.status_register &= (~flags);
 }
 
 void u16_byte_split(u16 sixteen_bit, u8 *high_byte, u8 *low_byte)
@@ -259,7 +245,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
             assert(location.page == 0x00 && "Invalid Page Zero Address");
-            Location new_loc = { .offset = location.offset + X, .page = location.page};
+            Location new_loc = { .offset = location.offset + cpu.x, .page = location.page};
             return s502_read_memory(new_loc);
         }
         case OPERAND_ABSOLUTE:
@@ -287,7 +273,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + X;
+            Absolute index = absolute + cpu.x;
             Location location = u16_to_loc(index);
             return s502_read_memory(location);
         }
@@ -302,7 +288,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + Y;
+            Absolute index = absolute + cpu.y;
             Location location = u16_to_loc(index);
             return s502_read_memory(location);
         }
@@ -321,7 +307,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
             assert(location.page == 0x00 && "Invalid Zero Page Address");
-            Location new_loc   = {.offset = location.offset + X, .page = location.page};
+            Location new_loc   = {.offset = location.offset + cpu.x, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
                 .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
@@ -347,7 +333,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
                 .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
                 .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
             };
-            final.offset += Y; // final Address that contains the data
+            final.offset += cpu.y; // final Address that contains the data
             return s502_read_memory(final);
         }
         case OPERAND_ABSOLUTE:
@@ -388,7 +374,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
             assert(location.page == 0x00 && "Invalid Page Zero Address");
-            return (Location) { .offset = location.offset + X, .page = location.page};
+            return (Location) { .offset = location.offset + cpu.x, .page = location.page};
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -414,7 +400,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + X;
+            Absolute index = absolute + cpu.x;
             return u16_to_loc(index);
         }
         case OPERAND_DATA:
@@ -428,7 +414,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + Y;
+            Absolute index = absolute + cpu.y;
             return u16_to_loc(index);
         }
         case OPERAND_DATA:
@@ -446,7 +432,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
             assert(location.page == 0x00 && "Invalid Zero Page Address");
-            Location new_loc   = {.offset = location.offset + X, .page = location.page};
+            Location new_loc   = {.offset = location.offset + cpu.x, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             return (Location) {
                 .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
@@ -471,7 +457,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
                 .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
                 .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
             };
-            final.offset += Y; // final Address that contains the data
+            final.offset += cpu.y; // final Address that contains the data
             return final;
         }
         case OPERAND_ABSOLUTE:
@@ -494,14 +480,14 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
 // A, Z , N = M, memory into Accumulator
 void s502_load_accumulator(Instruction instruction)
 {
-    accumulator = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (accumulator == 0) {
+    cpu.accumulator = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.accumulator == 0) {
         s502_set_psr_flags(Z_BIT_FLAG);
     } else {
         s502_clear_psr_flags(Z_BIT_FLAG);
     }
 
-    if (accumulator & N_BIT_FLAG) {
+    if (cpu.accumulator & N_BIT_FLAG) {
         s502_set_psr_flags(N_BIT_FLAG);
     } else {
         s502_clear_psr_flags(N_BIT_FLAG);
@@ -511,14 +497,14 @@ void s502_load_accumulator(Instruction instruction)
 // X,Z,N = M
 void s502_load_x_register(Instruction instruction)
 {
-    X = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (X == 0) {
+    cpu.x = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.x == 0) {
         s502_set_psr_flags(Z_BIT_FLAG);
     } else {
         s502_clear_psr_flags(Z_BIT_FLAG);
     }
 
-    if (X & N_BIT_FLAG) {
+    if (cpu.x & N_BIT_FLAG) {
         s502_set_psr_flags(N_BIT_FLAG);
     } else {
         s502_clear_psr_flags(N_BIT_FLAG);
@@ -528,14 +514,14 @@ void s502_load_x_register(Instruction instruction)
 // Y,Z,N =  M
 void s502_load_y_register(Instruction instruction)
 {
-    Y = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (Y == 0) {
+    cpu.y = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.y == 0) {
         s502_set_psr_flags(Z_BIT_FLAG);
     } else {
         s502_clear_psr_flags(Z_BIT_FLAG);
     }
 
-    if (Y & N_BIT_FLAG) {
+    if (cpu.y & N_BIT_FLAG) {
         s502_set_psr_flags(N_BIT_FLAG);
     } else {
         s502_clear_psr_flags(N_BIT_FLAG);
@@ -546,34 +532,34 @@ void s502_load_y_register(Instruction instruction)
 void s502_store_accumulator(Instruction instruction)
 {
     Location loc = s502_fetch_operand_location(instruction.mode, instruction.operand);
-    s502_write_memory(loc, accumulator); // Write Accumulator to memory
+    s502_write_memory(loc, cpu.accumulator); // Write Accumulator to memory
 }
 
 // M = Y, store accumulator into memory
 void s502_store_y_register(Instruction instruction)
 {
     Location loc = s502_fetch_operand_location(instruction.mode, instruction.operand);
-    s502_write_memory(loc, Y); // Write Y to memory
+    s502_write_memory(loc, cpu.y); // Write Y to memory
 }
 
 // M = X, store accumulator into memory
 void s502_store_x_register(Instruction instruction)
 {
     Location loc = s502_fetch_operand_location(instruction.mode, instruction.operand);
-    s502_write_memory(loc, X); // Write X to memory
+    s502_write_memory(loc, cpu.x); // Write X to memory
 }
 
 // A = X, transfer X to A, TXA
 void s502_transfer_x_to_accumulator()
 {
-    accumulator = X;
-    if (accumulator == 0) {
+    cpu.accumulator = cpu.x;
+    if (cpu.accumulator == 0) {
         s502_set_psr_flags(Z_BIT_FLAG);
     } else {
         s502_clear_psr_flags(Z_BIT_FLAG);
     }
 
-    if (accumulator & N_BIT_FLAG) {
+    if (cpu.accumulator & N_BIT_FLAG) {
         s502_set_psr_flags(N_BIT_FLAG);
     } else {
         s502_clear_psr_flags(N_BIT_FLAG);
@@ -583,14 +569,14 @@ void s502_transfer_x_to_accumulator()
 // A = Y, transfer Y to A, TYA
 void s502_transfer_y_to_accumulator()
 {
-    accumulator = Y;
-    if (accumulator == 0) {
+    cpu.accumulator = cpu.y;
+    if (cpu.accumulator == 0) {
         s502_set_psr_flags(Z_BIT_FLAG);
     } else {
         s502_clear_psr_flags(Z_BIT_FLAG);
     }
 
-    if (accumulator & N_BIT_FLAG) {
+    if (cpu.accumulator & N_BIT_FLAG) {
         s502_set_psr_flags(N_BIT_FLAG);
     } else {
         s502_clear_psr_flags(N_BIT_FLAG);
@@ -600,14 +586,14 @@ void s502_transfer_y_to_accumulator()
 // X = A, transfer Accumulator to X, TAX
 void s502_transfer_accumulator_to_x()
 {
-    X = accumulator;
-    if (X == 0) {
+    cpu.x = cpu.accumulator;
+    if (cpu.x == 0) {
         s502_set_psr_flags(Z_BIT_FLAG);
     } else {
         s502_clear_psr_flags(Z_BIT_FLAG);
     }
 
-    if (X & N_BIT_FLAG) {
+    if (cpu.x & N_BIT_FLAG) {
         s502_set_psr_flags(N_BIT_FLAG);
     } else {
         s502_clear_psr_flags(N_BIT_FLAG);
@@ -617,14 +603,14 @@ void s502_transfer_accumulator_to_x()
 // Y = A, transfer Accumulator to Y, TAY
 void s502_transfer_accumulator_to_y()
 {
-    Y = accumulator;
-    if (Y == 0) {
+    cpu.y = cpu.accumulator;
+    if (cpu.y == 0) {
         s502_set_psr_flags(Z_BIT_FLAG);
     } else {
         s502_clear_psr_flags(Z_BIT_FLAG);
     }
 
-    if (Y & N_BIT_FLAG) {
+    if (cpu.y & N_BIT_FLAG) {
         s502_set_psr_flags(N_BIT_FLAG);
     } else {
         s502_clear_psr_flags(N_BIT_FLAG);
@@ -634,7 +620,7 @@ void s502_transfer_accumulator_to_y()
 void s502_add_with_carry(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 raw = data + accumulator + (processor_status_register & C_BIT_FLAG);
+    u16 raw = data + cpu.accumulator + (cpu.status_register & C_BIT_FLAG);
     u8 result = (u8) raw;
 
     s502_clear_psr_flags(Z_BIT_FLAG);
@@ -647,16 +633,16 @@ void s502_add_with_carry(Instruction instruction)
     if (raw > MAX_U8) s502_set_psr_flags(C_BIT_FLAG);
 
     s502_clear_psr_flags(V_BIT_FLAG);
-    if (~(accumulator ^ data) & (accumulator ^ result) & 0x80) {
+    if (~(cpu.accumulator ^ data) & (cpu.accumulator ^ result) & 0x80) {
         s502_set_psr_flags(V_BIT_FLAG);
     }
-    accumulator = result;
+    cpu.accumulator = result;
 }
 
 void s502_sub_with_carry(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 raw = accumulator + (~data) + (processor_status_register & C_BIT_FLAG);
+    u16 raw = cpu.accumulator + (~data) + (cpu.status_register & C_BIT_FLAG);
     u8 result = (u8) raw;
 
     s502_clear_psr_flags(Z_BIT_FLAG);
@@ -669,7 +655,7 @@ void s502_sub_with_carry(Instruction instruction)
     if (raw > MAX_U8) s502_set_psr_flags(C_BIT_FLAG);
 
     // NOTE: N_BIT_FLAG = 0x80
-    u8 sign_a = accumulator & N_BIT_FLAG;
+    u8 sign_a = cpu.accumulator & N_BIT_FLAG;
     u8 sign_data_inverted = (~data) & N_BIT_FLAG;
     u8 sign_result = result & N_BIT_FLAG;
 
@@ -678,19 +664,19 @@ void s502_sub_with_carry(Instruction instruction)
     } else {
         s502_clear_psr_flags(V_BIT_FLAG);
     }
-    accumulator = result;
+    cpu.accumulator = result;
 }
 
 void s502_compare_accumulator_with_data(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 result = accumulator - data;
+    u16 result = cpu.accumulator - data;
 
     s502_clear_psr_flags(Z_BIT_FLAG);
-    if (accumulator == data) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.accumulator == data) s502_set_psr_flags(Z_BIT_FLAG);
 
     s502_clear_psr_flags(C_BIT_FLAG);
-    if (accumulator >= data) s502_set_psr_flags(C_BIT_FLAG);
+    if (cpu.accumulator >= data) s502_set_psr_flags(C_BIT_FLAG);
 
     s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
@@ -699,13 +685,12 @@ void s502_compare_accumulator_with_data(Instruction instruction)
 void s502_compare_x_register_with_data(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 result = X - data;
-
+    u16 result = cpu.x - data;
     s502_clear_psr_flags(Z_BIT_FLAG);
-    if (X == data) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.x == data) s502_set_psr_flags(Z_BIT_FLAG);
 
     s502_clear_psr_flags(C_BIT_FLAG);
-    if (X >= data) s502_set_psr_flags(C_BIT_FLAG);
+    if (cpu.x >= data) s502_set_psr_flags(C_BIT_FLAG);
 
     s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
@@ -714,28 +699,122 @@ void s502_compare_x_register_with_data(Instruction instruction)
 void s502_compare_y_register_with_data(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 result = Y - data;
+    u16 result = cpu.y - data;
 
     s502_clear_psr_flags(Z_BIT_FLAG);
-    if (Y == data) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.y == data) s502_set_psr_flags(Z_BIT_FLAG);
 
     s502_clear_psr_flags(C_BIT_FLAG);
-    if (Y >= data) s502_set_psr_flags(C_BIT_FLAG);
+    if (cpu.y >= data) s502_set_psr_flags(C_BIT_FLAG);
 
     s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+}
+
+void s502_transfer_stack_to_x()
+{
+    cpu.x = cpu.memory[0x01][cpu.stack];
+
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (cpu.x == 0) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    if (cpu.x & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+}
+
+void s502_transfer_x_to_stack()
+{
+    s502_push_stack(cpu.x);
+}
+
+void s502_transfer_accumulator_to_stack()
+{
+    s502_push_stack(cpu.accumulator);
+}
+
+void s502_transfer_status_register_to_stack()
+{
+    s502_push_stack(cpu.status_register);
+}
+
+void s502_pull_accumulator_from_stack()
+{
+    cpu.accumulator = s502_pull_stack();
+}
+
+void s502_pull_status_register_from_stack()
+{
+    cpu.status_register = s502_pull_stack();
+}
+
+void s502_logical_and(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    u8 result = cpu.accumulator & data;
+
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_clear_psr_flags(N_BIT_FLAG);
+
+    cpu.accumulator = result;
+}
+
+void s502_logical_xor(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    u8 result = cpu.accumulator ^ data;
+
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_clear_psr_flags(N_BIT_FLAG);
+
+    cpu.accumulator = result;
+}
+
+void s502_logical_or(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    u8 result = cpu.accumulator | data;
+
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_clear_psr_flags(N_BIT_FLAG);
+
+    cpu.accumulator = result;
+}
+
+void s502_bit_test(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    u8 result = cpu.accumulator & data;
+
+    s502_clear_psr_flags(Z_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
+
+    s502_clear_psr_flags(N_BIT_FLAG);
+    s502_clear_psr_flags(V_BIT_FLAG);
+    u8 m6 = data & (1 << 6);
+    u8 m7 = data & (1 << 7);
+    cpu.status_register |= m6;
+    cpu.status_register |= m7;
 }
 
 void s502_break()
 {
     s502_set_psr_flags(B_BIT_FLAG);
     u8 pc_high_byte, pc_low_byte;
-    u16_byte_split(program_counter, &pc_high_byte, &pc_low_byte); // Split the Program Counter
+    u16_byte_split(cpu.program_counter, &pc_high_byte, &pc_low_byte); // Split the Program Counter
     s502_push_stack(pc_high_byte); // Push higher-byte first
     s502_push_stack(pc_low_byte); // Push lower-byte second
-    s502_push_stack(processor_status_register); // Push the Process Status register
+    s502_push_stack(cpu.status_register); // Push the Process Status register
     // TODO: Make the Interrupt vector a const variable
-    program_counter = 0xFFFF; // load the Interrupt Vector into the Program Counter
+    cpu.program_counter = cpu.memory[MAX_PAGES][MAX_OFFSET]; // load the Interrupt Vector into the Program Counter
     printf("Program Interrupted\n");
 }
 
@@ -769,6 +848,18 @@ bool s502_decode(Instruction instruction)
     case CPX: s502_compare_x_register_with_data(instruction);  return true;
     case CPY: s502_compare_y_register_with_data(instruction);  return true;
 
+    case TSX: s502_transfer_stack_to_x();                      return true;
+    case TXS: s502_transfer_x_to_stack();                      return true;
+    case PHA: s502_transfer_accumulator_to_stack();            return true;
+    case PHP: s502_transfer_status_register_to_stack();        return true;
+    case PLA: s502_pull_accumulator_from_stack();              return true;
+    case PLP: s502_pull_status_register_from_stack();          return true;
+
+    case ORA: s502_logical_or(instruction);                    return true;
+    case AND: s502_logical_and(instruction);                   return true;
+    case EOR: s502_logical_xor(instruction);                   return true;
+    case BIT: s502_bit_test(instruction);          return true;
+
     case BRK: s502_break();                                    return true;
 
     case NOP: UNIMPLEMENTED("NOP");
@@ -776,16 +867,8 @@ bool s502_decode(Instruction instruction)
     case RTS: UNIMPLEMENTED("RTS");
     case JMP: UNIMPLEMENTED("JMP");
     case JSR: UNIMPLEMENTED("JSR");
-    case ORA: UNIMPLEMENTED("ORA");
-    case AND: UNIMPLEMENTED("AND");
-    case EOR: UNIMPLEMENTED("EOR");
-    case BIT: UNIMPLEMENTED("BIT");
-    case TSX: UNIMPLEMENTED("TSX");
-    case TXS: UNIMPLEMENTED("TXS");
-    case PHA: UNIMPLEMENTED("PHA");
-    case PHP: UNIMPLEMENTED("PHP");
-    case PLA: UNIMPLEMENTED("PLA");
-    case PLP: UNIMPLEMENTED("PLP");
+
+
     case INC: UNIMPLEMENTED("INC");
     case INX: UNIMPLEMENTED("INX");
     case INY: UNIMPLEMENTED("INY");

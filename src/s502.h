@@ -6,15 +6,25 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-typedef int32_t i32;
-// Registers
-typedef u8 Stack;
-typedef u8 Register_X;
-typedef u8 Register_Y;
-typedef u16 PC; // Program Counter
-typedef u8 PSR; // Process Status Register
+typedef int32_t  i32;
 
-typedef u8 Memory;
+#define MAX_U8     0xFF
+#define MAX_OFFSET MAX_U8
+#define MAX_PAGES  MAX_U8
+
+typedef struct {
+    u8 x; // Register x
+    u8 y; // Register y
+    u8 stack; // Stack pointer
+    u16 program_counter; // Program Counter
+    u8 status_register; // Process Status Register
+    u8 accumulator; // Accumulator
+
+    // +1 to make it 256
+    // 256 pages
+    // 256 offsets in each page
+    u8 memory[MAX_PAGES + 1][MAX_OFFSET + 1]; // Memory Layout
+} CPU;
 
 typedef enum {
     N_BIT_FLAG = 0x80, // Negative bit flag
@@ -165,10 +175,6 @@ typedef struct {
     Opcode  opcode;
     Operand operand;
 } Instruction;
-
-#define MAX_U8     0xFF
-#define MAX_OFFSET MAX_U8
-#define MAX_PAGES  MAX_U8
 
 typedef struct {
     Opcode opcode;
