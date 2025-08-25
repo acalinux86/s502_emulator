@@ -8,7 +8,7 @@ typedef uint64_t u64;
 
 typedef int32_t  i32;
 
-#define MAX_U8     0xFF
+#define MAX_U8     (UINT8_MAX)
 #define MAX_OFFSET MAX_U8
 #define MAX_PAGES  MAX_U8
 
@@ -181,6 +181,12 @@ typedef struct {
     Addressing_Modes mode;
 } Opcode_Info;
 
+// Opcode/Mode matrix
+extern Opcode_Info opcode_matrix[MAX_U8 + 1];
+
+// CPU
+extern CPU cpu;
+
 // Functions Declarations
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode);
 const char *s502_opcode_as_cstr(Opcode opcode);
@@ -231,7 +237,7 @@ void s502_set_psr_flags(PSR_Flags flags);
 void s502_clear_psr_flags(PSR_Flags flags);
 
 u8 *u16_bit_split(u16 sixteen_bit);
-u16 u8_bits_join(u8 a, u8 b);
+u16 u8_bytes_join(u8 a, u8 b);
 Location u16_to_loc(u16 sixteen_bit);
 
 u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand);

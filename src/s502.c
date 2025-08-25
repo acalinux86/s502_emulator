@@ -26,7 +26,7 @@ Opcode_Info opcode_matrix[MAX_U8 + 1] = {
     {BEQ, REL} ,  {SBC, INDY},        {0x00},        {0x00},        {0x00}, {SBC, ZPX}, {INC, ZPX},      {0x00},  {SED, IMPL}, {SBC, ABSY},        {0x00},        {0x00},      {0x00}, {SBC, ABSX},  {INC, ABSX},    {0x00}, // F-
 };
 
-static CPU cpu = {0};
+CPU cpu = {0};
 
 void s502_dump_page(u8 *page)
 {
@@ -192,7 +192,7 @@ void u16_byte_split(u16 sixteen_bit, u8 *high_byte, u8 *low_byte)
 }
 
 // a must be the higher-byte and b the lower-byte
-u16 u8_bits_join(u8 a, u8 b)
+u16 u8_bytes_join(u8 a, u8 b)
 {
     return (a << 8) | b;
 }
