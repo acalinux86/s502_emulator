@@ -341,10 +341,20 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
+
+    case REL: {
+        switch (operand.type) {
+        case OPERAND_DATA: {
+            return s502_read_memory(operand.data.data);
+        } break;
+        case OPERAND_ABSOLUTE:
+        case OPERAND_LOCATION:
+        default: ILLEGAL_ACCESS(operand.mode, operand.type);
+    } break;
+
     case IMPL:
     case ACCU:
     case ZPY:
-    case REL:
     case IND:
     default: ILLEGAL_ADDRESSING(mode, ERROR_FETCH_DATA);
     }
@@ -466,11 +476,11 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         }
     } break;
 
+    case REL:
     case IMME:
     case IMPL:
     case ACCU:
     case ZPY:
-    case REL:
     case IND:
     default: ILLEGAL_ADDRESSING(mode, ERROR_FETCH_LOCATION);
     }
@@ -858,7 +868,7 @@ bool s502_decode(Instruction instruction)
     case ORA: s502_logical_or(instruction);                    return true;
     case AND: s502_logical_and(instruction);                   return true;
     case EOR: s502_logical_xor(instruction);                   return true;
-    case BIT: s502_bit_test(instruction);          return true;
+    case BIT: s502_bit_test(instruction);                      return true;
 
     case BRK: s502_break();                                    return true;
 
