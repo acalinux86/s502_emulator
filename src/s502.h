@@ -263,6 +263,19 @@ void s502_compare_accumulator_with_data(Instruction instruction);
 void s502_compare_x_register_with_data(Instruction instruction);
 void s502_compare_y_register_with_data(Instruction instruction);
 
+void s502_transfer_stack_to_x();
+void s502_transfer_x_to_stack();
+void s502_transfer_accumulator_to_stack();
+void s502_transfer_status_register_to_stack();
+
+void s502_pull_accumulator_from_stack();
+void s502_pull_status_register_from_stack();
+
+void s502_logical_and(Instruction instruction);
+void s502_logical_xor(Instruction instruction);
+void s502_logical_or(Instruction instruction);
+void s502_bit_test(Instruction instruction);
+
 void s502_break();
 bool s502_decode(Instruction instruction);
 
