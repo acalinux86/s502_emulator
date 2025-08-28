@@ -11,6 +11,7 @@ typedef int32_t  i32;
 #define MAX_U8     (UINT8_MAX)
 #define MAX_OFFSET MAX_U8
 #define MAX_PAGES  MAX_U8
+#define STACK_PAGE 0x01
 
 typedef struct {
     u8 x; // Register x
@@ -29,6 +30,7 @@ typedef struct {
 typedef enum {
     N_BIT_FLAG = 0x80, // Negative bit flag
     V_BIT_FLAG = 0x40, // Overflow bit flag
+    U_BIT_FLAG = 0x20, // UNSET BIT, intialized with the PSR
     B_BIT_FLAG = 0x10, // Break bit flag
     D_BIT_FLAG = 0x08, // Decimal mode bit flag
     I_BIT_FLAG = 0x04, // Interrupt disable bit flag
@@ -223,6 +225,8 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
         abort();                                                        \
     } while (0)
 
+void s502_cpu_init();
+
 void s502_dump_page(u8 *page);
 void s502_dump_memory();
 void s502_print_stats();
@@ -235,10 +239,6 @@ void s502_write_memory(Location location, u8 data);
 
 void s502_set_psr_flags(PSR_Flags flags);
 void s502_clear_psr_flags(PSR_Flags flags);
-
-u8 *u16_bit_split(u16 sixteen_bit);
-u16 u8_bytes_join(u8 a, u8 b);
-Location u16_to_loc(u16 sixteen_bit);
 
 u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand);
 Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand);
@@ -263,7 +263,34 @@ void s502_compare_accumulator_with_data(Instruction instruction);
 void s502_compare_x_register_with_data(Instruction instruction);
 void s502_compare_y_register_with_data(Instruction instruction);
 
+void s502_transfer_stack_to_x();
+void s502_transfer_x_to_stack();
+void s502_transfer_accumulator_to_stack();
+void s502_transfer_status_register_to_stack();
+
+void s502_pull_accumulator_from_stack();
+void s502_pull_status_register_from_stack();
+
+void s502_logical_and(Instruction instruction);
+void s502_logical_xor(Instruction instruction);
+void s502_logical_or(Instruction instruction);
+void s502_bit_test(Instruction instruction);
+
+void s502_branch_carry_clear(Instruction instruction);
+void s502_branch_carry_set(Instruction instruction);
+void s502_branch_zero_set(Instruction instruction);
+void s502_branch_zero_clear(Instruction instruction);
+void s502_branch_negative_set(Instruction instruction);
+void s502_branch_negative_clear(Instruction instruction);
+void s502_branch_overflow_set(Instruction instruction);
+void s502_branch_overflow_clear(Instruction instruction);
+
 void s502_break();
 bool s502_decode(Instruction instruction);
 
+
+// Helper functions
+void u16_to_bytes(u16 sixteen_bit, u8 *high_byte, u8 *low_byte);
+u16 bytes_to_u16(u8 a, u8 b);
+Location u16_to_loc(u16 sixteen_bit);
 #endif // EMULATOR_6502_H_

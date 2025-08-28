@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -28,6 +29,18 @@ Opcode_Info opcode_matrix[MAX_U8 + 1] = {
 
 CPU cpu = {0};
 
+// DEBUG:
+void s502_cpu_init()
+{
+    cpu.program_counter = 0;
+    cpu.status_register = U_BIT_FLAG;
+    cpu.stack = 0xFF;
+    memset(cpu.memory, 0, sizeof(cpu.memory));
+    cpu.x = 0;
+    cpu.y = 0;
+    cpu.accumulator = 0;
+}
+
 void s502_dump_page(u8 *page)
 {
     u8 page_width = 16;
@@ -43,12 +56,14 @@ void s502_dump_page(u8 *page)
 void s502_push_stack(u8 value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
-    cpu.memory[0x01][cpu.stack--] = value;
+    cpu.memory[STACK_PAGE][cpu.stack] = value;
+    cpu.stack--;
 }
 
 u8 s502_pull_stack()
 {
-    return cpu.memory[0x01][cpu.stack++];
+    cpu.stack++;
+    return cpu.memory[STACK_PAGE][cpu.stack];
 }
 
 void s502_dump_memory()
@@ -185,14 +200,14 @@ void s502_clear_psr_flags(PSR_Flags flags)
     cpu.status_register &= (~flags);
 }
 
-void u16_byte_split(u16 sixteen_bit, u8 *high_byte, u8 *low_byte)
+void u16_to_bytes(u16 sixteen_bit, u8 *high_byte, u8 *low_byte)
 {
     *high_byte = sixteen_bit >> 8; // higher byte
     *low_byte  = sixteen_bit & 0xFF; // low-byte
 }
 
 // a must be the higher-byte and b the lower-byte
-u16 u8_bytes_join(u8 a, u8 b)
+u16 bytes_to_u16(u8 a, u8 b)
 {
     return (a << 8) | b;
 }
@@ -200,7 +215,7 @@ u16 u8_bytes_join(u8 a, u8 b)
 Location u16_to_loc(u16 sixteen_bit)
 {
     u8 high_byte, low_byte;
-    u16_byte_split(sixteen_bit, &high_byte, &low_byte);
+    u16_to_bytes(sixteen_bit, &high_byte, &low_byte);
     Location loc = {
         .page = high_byte, // higher byte
         .offset = low_byte, // low-byte
@@ -341,12 +356,26 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         default: ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
+
+    case REL: {
+        switch (operand.type) {
+        case OPERAND_DATA: {
+            // NOTE: Relative Addressing only always provides an offset
+            // with which to be added to the PC
+            return operand.data.data;
+        } break;
+        case OPERAND_ABSOLUTE:
+        case OPERAND_LOCATION:
+        default: ILLEGAL_ACCESS(mode, operand.type);
+        }
+    } break;
+
     case IMPL:
     case ACCU:
     case ZPY:
-    case REL:
     case IND:
-    default: ILLEGAL_ADDRESSING(mode, ERROR_FETCH_DATA);
+    default:
+        ILLEGAL_ADDRESSING(mode, ERROR_FETCH_DATA);
     }
     UNREACHABLE("s502_fetch_operand_data");
 }
@@ -466,11 +495,11 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         }
     } break;
 
+    case REL:
     case IMME:
     case IMPL:
     case ACCU:
     case ZPY:
-    case REL:
     case IND:
     default: ILLEGAL_ADDRESSING(mode, ERROR_FETCH_LOCATION);
     }
@@ -481,51 +510,27 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
 void s502_load_accumulator(Instruction instruction)
 {
     cpu.accumulator = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (cpu.accumulator == 0) {
-        s502_set_psr_flags(Z_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(Z_BIT_FLAG);
-    }
-
-    if (cpu.accumulator & N_BIT_FLAG) {
-        s502_set_psr_flags(N_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(N_BIT_FLAG);
-    }
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu.accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.accumulator & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
 // X,Z,N = M
 void s502_load_x_register(Instruction instruction)
 {
     cpu.x = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (cpu.x == 0) {
-        s502_set_psr_flags(Z_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(Z_BIT_FLAG);
-    }
-
-    if (cpu.x & N_BIT_FLAG) {
-        s502_set_psr_flags(N_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(N_BIT_FLAG);
-    }
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu.x == 0) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.x & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
 // Y,Z,N =  M
 void s502_load_y_register(Instruction instruction)
 {
     cpu.y = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (cpu.y == 0) {
-        s502_set_psr_flags(Z_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(Z_BIT_FLAG);
-    }
-
-    if (cpu.y & N_BIT_FLAG) {
-        s502_set_psr_flags(N_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(N_BIT_FLAG);
-    }
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu.y == 0) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.y & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
 // M = A, store accumulator into memory
@@ -553,68 +558,36 @@ void s502_store_x_register(Instruction instruction)
 void s502_transfer_x_to_accumulator()
 {
     cpu.accumulator = cpu.x;
-    if (cpu.accumulator == 0) {
-        s502_set_psr_flags(Z_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(Z_BIT_FLAG);
-    }
-
-    if (cpu.accumulator & N_BIT_FLAG) {
-        s502_set_psr_flags(N_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(N_BIT_FLAG);
-    }
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu.accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.accumulator & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
 // A = Y, transfer Y to A, TYA
 void s502_transfer_y_to_accumulator()
 {
     cpu.accumulator = cpu.y;
-    if (cpu.accumulator == 0) {
-        s502_set_psr_flags(Z_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(Z_BIT_FLAG);
-    }
-
-    if (cpu.accumulator & N_BIT_FLAG) {
-        s502_set_psr_flags(N_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(N_BIT_FLAG);
-    }
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu.accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.accumulator & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
 // X = A, transfer Accumulator to X, TAX
 void s502_transfer_accumulator_to_x()
 {
     cpu.x = cpu.accumulator;
-    if (cpu.x == 0) {
-        s502_set_psr_flags(Z_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(Z_BIT_FLAG);
-    }
-
-    if (cpu.x & N_BIT_FLAG) {
-        s502_set_psr_flags(N_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(N_BIT_FLAG);
-    }
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu.x == 0) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.x & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
 // Y = A, transfer Accumulator to Y, TAY
 void s502_transfer_accumulator_to_y()
 {
     cpu.y = cpu.accumulator;
-    if (cpu.y == 0) {
-        s502_set_psr_flags(Z_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(Z_BIT_FLAG);
-    }
-
-    if (cpu.y & N_BIT_FLAG) {
-        s502_set_psr_flags(N_BIT_FLAG);
-    } else {
-        s502_clear_psr_flags(N_BIT_FLAG);
-    }
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu.y == 0) s502_set_psr_flags(Z_BIT_FLAG);
+    if (cpu.y & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
 void s502_add_with_carry(Instruction instruction)
@@ -623,16 +596,10 @@ void s502_add_with_carry(Instruction instruction)
     u16 raw = data + cpu.accumulator + (cpu.status_register & C_BIT_FLAG);
     u8 result = (u8) raw;
 
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG | V_BIT_FLAG);
     if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-
-    s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
-
-    s502_clear_psr_flags(C_BIT_FLAG);
     if (raw > MAX_U8) s502_set_psr_flags(C_BIT_FLAG);
-
-    s502_clear_psr_flags(V_BIT_FLAG);
     if (~(cpu.accumulator ^ data) & (cpu.accumulator ^ result) & 0x80) {
         s502_set_psr_flags(V_BIT_FLAG);
     }
@@ -645,13 +612,9 @@ void s502_sub_with_carry(Instruction instruction)
     u16 raw = cpu.accumulator + (~data) + (cpu.status_register & C_BIT_FLAG);
     u8 result = (u8) raw;
 
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG);
     if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-
-    s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
-
-    s502_clear_psr_flags(C_BIT_FLAG);
     if (raw > MAX_U8) s502_set_psr_flags(C_BIT_FLAG);
 
     // NOTE: N_BIT_FLAG = 0x80
@@ -672,13 +635,9 @@ void s502_compare_accumulator_with_data(Instruction instruction)
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
     u16 result = cpu.accumulator - data;
 
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | C_BIT_FLAG | N_BIT_FLAG);
     if (cpu.accumulator == data) s502_set_psr_flags(Z_BIT_FLAG);
-
-    s502_clear_psr_flags(C_BIT_FLAG);
     if (cpu.accumulator >= data) s502_set_psr_flags(C_BIT_FLAG);
-
-    s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
@@ -686,13 +645,9 @@ void s502_compare_x_register_with_data(Instruction instruction)
 {
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
     u16 result = cpu.x - data;
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | C_BIT_FLAG | N_BIT_FLAG);
     if (cpu.x == data) s502_set_psr_flags(Z_BIT_FLAG);
-
-    s502_clear_psr_flags(C_BIT_FLAG);
     if (cpu.x >= data) s502_set_psr_flags(C_BIT_FLAG);
-
-    s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
@@ -701,24 +656,18 @@ void s502_compare_y_register_with_data(Instruction instruction)
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
     u16 result = cpu.y - data;
 
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | C_BIT_FLAG | N_BIT_FLAG);
     if (cpu.y == data) s502_set_psr_flags(Z_BIT_FLAG);
-
-    s502_clear_psr_flags(C_BIT_FLAG);
     if (cpu.y >= data) s502_set_psr_flags(C_BIT_FLAG);
-
-    s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
 void s502_transfer_stack_to_x()
 {
-    cpu.x = cpu.memory[0x01][cpu.stack];
+    cpu.x = cpu.memory[STACK_PAGE][cpu.stack];
 
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
     if (cpu.x == 0) s502_set_psr_flags(Z_BIT_FLAG);
-
-    s502_clear_psr_flags(N_BIT_FLAG);
     if (cpu.x & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
@@ -752,12 +701,9 @@ void s502_logical_and(Instruction instruction)
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
     u8 result = cpu.accumulator & data;
 
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
     if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-
-    s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_clear_psr_flags(N_BIT_FLAG);
-
     cpu.accumulator = result;
 }
 
@@ -766,12 +712,9 @@ void s502_logical_xor(Instruction instruction)
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
     u8 result = cpu.accumulator ^ data;
 
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
     if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-
-    s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_clear_psr_flags(N_BIT_FLAG);
-
     cpu.accumulator = result;
 }
 
@@ -780,12 +723,9 @@ void s502_logical_or(Instruction instruction)
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
     u8 result = cpu.accumulator | data;
 
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
     if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-
-    s502_clear_psr_flags(N_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_clear_psr_flags(N_BIT_FLAG);
-
     cpu.accumulator = result;
 }
 
@@ -794,22 +734,81 @@ void s502_bit_test(Instruction instruction)
     u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
     u8 result = cpu.accumulator & data;
 
-    s502_clear_psr_flags(Z_BIT_FLAG);
+    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG | V_BIT_FLAG);
     if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
+    if (data & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+    if (data & V_BIT_FLAG) s502_set_psr_flags(V_BIT_FLAG);
+}
 
-    s502_clear_psr_flags(N_BIT_FLAG);
-    s502_clear_psr_flags(V_BIT_FLAG);
-    u8 m6 = data & (1 << 6);
-    u8 m7 = data & (1 << 7);
-    cpu.status_register |= m6;
-    cpu.status_register |= m7;
+void s502_branch_carry_clear(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.status_register & C_BIT_FLAG) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_carry_set(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (!(cpu.status_register & C_BIT_FLAG)) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_zero_set(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.status_register &  Z_BIT_FLAG) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_zero_clear(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (!(cpu.status_register & Z_BIT_FLAG)) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_negative_set(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.status_register & N_BIT_FLAG) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_negative_clear(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (!(cpu.status_register & N_BIT_FLAG)) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_overflow_set(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.status_register & V_BIT_FLAG) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_overflow_clear(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (!(cpu.status_register & V_BIT_FLAG)) {
+        cpu.program_counter += (data);
+    }
 }
 
 void s502_break()
 {
     s502_set_psr_flags(B_BIT_FLAG);
     u8 pc_high_byte, pc_low_byte;
-    u16_byte_split(cpu.program_counter, &pc_high_byte, &pc_low_byte); // Split the Program Counter
+    u16_to_bytes(cpu.program_counter, &pc_high_byte, &pc_low_byte); // Split the Program Counter
     s502_push_stack(pc_high_byte); // Push higher-byte first
     s502_push_stack(pc_low_byte); // Push lower-byte second
     s502_push_stack(cpu.status_register); // Push the Process Status register
@@ -858,7 +857,16 @@ bool s502_decode(Instruction instruction)
     case ORA: s502_logical_or(instruction);                    return true;
     case AND: s502_logical_and(instruction);                   return true;
     case EOR: s502_logical_xor(instruction);                   return true;
-    case BIT: s502_bit_test(instruction);          return true;
+    case BIT: s502_bit_test(instruction);                      return true;
+
+    case BNE: s502_branch_zero_clear(instruction);             return true;
+    case BCC: s502_branch_carry_clear(instruction);            return true;
+    case BCS: s502_branch_carry_set(instruction);              return true;
+    case BEQ: s502_branch_zero_set(instruction);               return true;
+    case BMI: s502_branch_negative_set(instruction);           return true;
+    case BPL: s502_branch_negative_clear(instruction);         return true;
+    case BVC: s502_branch_overflow_clear(instruction);         return true;
+    case BVS: s502_branch_overflow_set(instruction);           return true;
 
     case BRK: s502_break();                                    return true;
 
@@ -875,14 +883,7 @@ bool s502_decode(Instruction instruction)
     case DEX: UNIMPLEMENTED("DEX");
     case DEY: UNIMPLEMENTED("DEY");
     case DEC: UNIMPLEMENTED("DEC");
-    case BNE: UNIMPLEMENTED("BNE");
-    case BCC: UNIMPLEMENTED("BCC");
-    case BCS: UNIMPLEMENTED("BCS");
-    case BEQ: UNIMPLEMENTED("BEQ");
-    case BMI: UNIMPLEMENTED("BMI");
-    case BPL: UNIMPLEMENTED("BPL");
-    case BVC: UNIMPLEMENTED("BVC");
-    case BVS: UNIMPLEMENTED("BVS");
+
     case ASL: UNIMPLEMENTED("ASL");
     case LSR: UNIMPLEMENTED("LSR");
     case ROL: UNIMPLEMENTED("ROL");
@@ -892,4 +893,5 @@ bool s502_decode(Instruction instruction)
     default:
         return false;
     }
+    UNREACHABLE("decode");
 }
