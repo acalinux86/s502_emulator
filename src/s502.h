@@ -236,10 +236,6 @@ void s502_write_memory(Location location, u8 data);
 void s502_set_psr_flags(PSR_Flags flags);
 void s502_clear_psr_flags(PSR_Flags flags);
 
-u8 *u16_bit_split(u16 sixteen_bit);
-u16 u8_bytes_join(u8 a, u8 b);
-Location u16_to_loc(u16 sixteen_bit);
-
 u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand);
 Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand);
 
@@ -279,4 +275,9 @@ void s502_bit_test(Instruction instruction);
 void s502_break();
 bool s502_decode(Instruction instruction);
 
+
+// Helper functions
+void u16_to_bytes(u16 sixteen_bit, u8 *high_byte, u8 *low_byte);
+u16 bytes_to_u16(u8 a, u8 b);
+Location u16_to_loc(u16 sixteen_bit);
 #endif // EMULATOR_6502_H_

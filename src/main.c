@@ -50,7 +50,7 @@ Instruction fetch_instruction()
         cpu.program_counter++;
         locs = u16_to_loc(cpu.program_counter);
         u8 offset = s502_read_memory(locs);
-        u16 abs = u8_bytes_join(offset, page);
+        u16 abs = bytes_to_u16(offset, page);
         inst.operand.data.address.absolute = abs;
         inst.operand.type = OPERAND_ABSOLUTE;
         cpu.program_counter++;
