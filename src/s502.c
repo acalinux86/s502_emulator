@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -27,6 +28,18 @@ Opcode_Info opcode_matrix[MAX_U8 + 1] = {
 };
 
 CPU cpu = {0};
+
+// DEBUG:
+void s502_cpu_init()
+{
+    cpu.program_counter = 0;
+    cpu.status_register = U_BIT_FLAG;
+    cpu.stack = 0xFF;
+    memset(cpu.memory, 0, sizeof(cpu.memory));
+    cpu.x = 0;
+    cpu.y = 0;
+    cpu.accumulator = 0;
+}
 
 void s502_dump_page(u8 *page)
 {
@@ -347,7 +360,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
     case REL: {
         switch (operand.type) {
         case OPERAND_DATA: {
-            // TODO: return s502_read_memory(operand.data.data);
+            // NOTE: Relative Addressing only always provides an offset
+            // with which to be added to the PC
             return operand.data.data;
         } break;
         case OPERAND_ABSOLUTE:
@@ -726,6 +740,70 @@ void s502_bit_test(Instruction instruction)
     if (data & V_BIT_FLAG) s502_set_psr_flags(V_BIT_FLAG);
 }
 
+void s502_branch_carry_clear(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.status_register & C_BIT_FLAG) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_carry_set(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (!(cpu.status_register & C_BIT_FLAG)) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_zero_set(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.status_register &  Z_BIT_FLAG) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_zero_clear(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (!(cpu.status_register & Z_BIT_FLAG)) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_negative_set(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.status_register & N_BIT_FLAG) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_negative_clear(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (!(cpu.status_register & N_BIT_FLAG)) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_overflow_set(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (cpu.status_register & V_BIT_FLAG) {
+        cpu.program_counter += (data);
+    }
+}
+
+void s502_branch_overflow_clear(Instruction instruction)
+{
+    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
+    if (!(cpu.status_register & V_BIT_FLAG)) {
+        cpu.program_counter += (data);
+    }
+}
+
 void s502_break()
 {
     s502_set_psr_flags(B_BIT_FLAG);
@@ -781,6 +859,15 @@ bool s502_decode(Instruction instruction)
     case EOR: s502_logical_xor(instruction);                   return true;
     case BIT: s502_bit_test(instruction);                      return true;
 
+    case BNE: s502_branch_zero_clear(instruction);             return true;
+    case BCC: s502_branch_carry_clear(instruction);            return true;
+    case BCS: s502_branch_carry_set(instruction);              return true;
+    case BEQ: s502_branch_zero_set(instruction);               return true;
+    case BMI: s502_branch_negative_set(instruction);           return true;
+    case BPL: s502_branch_negative_clear(instruction);         return true;
+    case BVC: s502_branch_overflow_clear(instruction);         return true;
+    case BVS: s502_branch_overflow_set(instruction);           return true;
+
     case BRK: s502_break();                                    return true;
 
     case NOP: UNIMPLEMENTED("NOP");
@@ -796,14 +883,7 @@ bool s502_decode(Instruction instruction)
     case DEX: UNIMPLEMENTED("DEX");
     case DEY: UNIMPLEMENTED("DEY");
     case DEC: UNIMPLEMENTED("DEC");
-    case BNE: UNIMPLEMENTED("BNE");
-    case BCC: UNIMPLEMENTED("BCC");
-    case BCS: UNIMPLEMENTED("BCS");
-    case BEQ: UNIMPLEMENTED("BEQ");
-    case BMI: UNIMPLEMENTED("BMI");
-    case BPL: UNIMPLEMENTED("BPL");
-    case BVC: UNIMPLEMENTED("BVC");
-    case BVS: UNIMPLEMENTED("BVS");
+
     case ASL: UNIMPLEMENTED("ASL");
     case LSR: UNIMPLEMENTED("LSR");
     case ROL: UNIMPLEMENTED("ROL");
