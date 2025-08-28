@@ -345,18 +345,21 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
     case REL: {
         switch (operand.type) {
         case OPERAND_DATA: {
-            return s502_read_memory(operand.data.data);
+            // TODO: return s502_read_memory(operand.data.data);
+            return operand.data.data;
         } break;
         case OPERAND_ABSOLUTE:
         case OPERAND_LOCATION:
-        default: ILLEGAL_ACCESS(operand.mode, operand.type);
+        default: ILLEGAL_ACCESS(mode, operand.type);
+        }
     } break;
 
     case IMPL:
     case ACCU:
     case ZPY:
     case IND:
-    default: ILLEGAL_ADDRESSING(mode, ERROR_FETCH_DATA);
+    default:
+        ILLEGAL_ADDRESSING(mode, ERROR_FETCH_DATA);
     }
     UNREACHABLE("s502_fetch_operand_data");
 }
@@ -902,4 +905,5 @@ bool s502_decode(Instruction instruction)
     default:
         return false;
     }
+    UNREACHABLE("decode");
 }
