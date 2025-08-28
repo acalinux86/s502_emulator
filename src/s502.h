@@ -11,6 +11,7 @@ typedef int32_t  i32;
 #define MAX_U8     (UINT8_MAX)
 #define MAX_OFFSET MAX_U8
 #define MAX_PAGES  MAX_U8
+#define STACK_PAGE 0x01
 
 typedef struct {
     u8 x; // Register x

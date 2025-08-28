@@ -43,14 +43,14 @@ void s502_dump_page(u8 *page)
 void s502_push_stack(u8 value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
-    cpu.memory[0x01][cpu.stack] = value;
+    cpu.memory[STACK_PAGE][cpu.stack] = value;
     cpu.stack--;
 }
 
 u8 s502_pull_stack()
 {
     cpu.stack++;
-    return cpu.memory[0x01][cpu.stack];
+    return cpu.memory[STACK_PAGE][cpu.stack];
 }
 
 void s502_dump_memory()
@@ -650,7 +650,7 @@ void s502_compare_y_register_with_data(Instruction instruction)
 
 void s502_transfer_stack_to_x()
 {
-    cpu.x = cpu.memory[0x01][cpu.stack];
+    cpu.x = cpu.memory[STACK_PAGE][cpu.stack];
 
     s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
     if (cpu.x == 0) s502_set_psr_flags(Z_BIT_FLAG);
