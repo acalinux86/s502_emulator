@@ -30,6 +30,7 @@ typedef struct {
 typedef enum {
     N_BIT_FLAG = 0x80, // Negative bit flag
     V_BIT_FLAG = 0x40, // Overflow bit flag
+    U_BIT_FLAG = 0x20, // UNSET BIT, intialized with the PSR
     B_BIT_FLAG = 0x10, // Break bit flag
     D_BIT_FLAG = 0x08, // Decimal mode bit flag
     I_BIT_FLAG = 0x04, // Interrupt disable bit flag
@@ -224,6 +225,8 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
         abort();                                                        \
     } while (0)
 
+void s502_cpu_init();
+
 void s502_dump_page(u8 *page);
 void s502_dump_memory();
 void s502_print_stats();
@@ -272,6 +275,15 @@ void s502_logical_and(Instruction instruction);
 void s502_logical_xor(Instruction instruction);
 void s502_logical_or(Instruction instruction);
 void s502_bit_test(Instruction instruction);
+
+void s502_branch_carry_clear(Instruction instruction);
+void s502_branch_carry_set(Instruction instruction);
+void s502_branch_zero_set(Instruction instruction);
+void s502_branch_zero_clear(Instruction instruction);
+void s502_branch_negative_set(Instruction instruction);
+void s502_branch_negative_clear(Instruction instruction);
+void s502_branch_overflow_set(Instruction instruction);
+void s502_branch_overflow_clear(Instruction instruction);
 
 void s502_break();
 bool s502_decode(Instruction instruction);
