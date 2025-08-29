@@ -30,7 +30,7 @@ Opcode_Info opcode_matrix[MAX_U8 + 1] = {
 CPU cpu = {0};
 
 // DEBUG:
-void s502_cpu_init()
+void s502_cpu_init(void)
 {
     cpu.program_counter = 0;
     cpu.status_register = U_BIT_FLAG;
@@ -60,13 +60,13 @@ void s502_push_stack(u8 value)
     cpu.stack--;
 }
 
-u8 s502_pull_stack()
+u8 s502_pull_stack(void)
 {
     cpu.stack++;
     return cpu.memory[STACK_PAGE][cpu.stack];
 }
 
-void s502_dump_memory()
+void s502_dump_memory(void)
 {
     for (u8 i = 0; i < MAX_PAGES; ++i) {
         s502_dump_page(cpu.memory[i]);
@@ -74,7 +74,7 @@ void s502_dump_memory()
 }
 
 // NOTE: Print Stats
-void s502_print_stats()
+void s502_print_stats(void)
 {
     printf("Stack       : %u\n", cpu.stack);
     printf("X           : %u\n", cpu.x);
@@ -344,12 +344,11 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
             assert(location.page == 0x00 && "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
-            Location final = {
-                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
-                .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
-            };
-            final.offset += cpu.y; // final Address that contains the data
-            return s502_read_memory(final);
+            u8 offset = s502_read_memory(new_loc);   // fetch low-byte from new_loc
+            u8 page =   s502_read_memory(new_loc_i); // fetch high-byte from new_loc + 1
+            u16 base_addr = bytes_to_u16(page, offset);
+            u16 final = base_addr + cpu.y;
+            return s502_read_memory(u16_to_loc(final));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -555,7 +554,7 @@ void s502_store_x_register(Instruction instruction)
 }
 
 // A = X, transfer X to A, TXA
-void s502_transfer_x_to_accumulator()
+void s502_transfer_x_to_accumulator(void)
 {
     cpu.accumulator = cpu.x;
     s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
@@ -564,7 +563,7 @@ void s502_transfer_x_to_accumulator()
 }
 
 // A = Y, transfer Y to A, TYA
-void s502_transfer_y_to_accumulator()
+void s502_transfer_y_to_accumulator(void)
 {
     cpu.accumulator = cpu.y;
     s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
@@ -573,7 +572,7 @@ void s502_transfer_y_to_accumulator()
 }
 
 // X = A, transfer Accumulator to X, TAX
-void s502_transfer_accumulator_to_x()
+void s502_transfer_accumulator_to_x(void)
 {
     cpu.x = cpu.accumulator;
     s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
@@ -582,7 +581,7 @@ void s502_transfer_accumulator_to_x()
 }
 
 // Y = A, transfer Accumulator to Y, TAY
-void s502_transfer_accumulator_to_y()
+void s502_transfer_accumulator_to_y(void)
 {
     cpu.y = cpu.accumulator;
     s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
@@ -662,7 +661,7 @@ void s502_compare_y_register_with_data(Instruction instruction)
     if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
-void s502_transfer_stack_to_x()
+void s502_transfer_stack_to_x(void)
 {
     cpu.x = cpu.memory[STACK_PAGE][cpu.stack];
 
@@ -671,27 +670,27 @@ void s502_transfer_stack_to_x()
     if (cpu.x & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
 }
 
-void s502_transfer_x_to_stack()
+void s502_transfer_x_to_stack(void)
 {
     s502_push_stack(cpu.x);
 }
 
-void s502_transfer_accumulator_to_stack()
+void s502_transfer_accumulator_to_stack(void)
 {
     s502_push_stack(cpu.accumulator);
 }
 
-void s502_transfer_status_register_to_stack()
+void s502_transfer_status_register_to_stack(void)
 {
     s502_push_stack(cpu.status_register);
 }
 
-void s502_pull_accumulator_from_stack()
+void s502_pull_accumulator_from_stack(void)
 {
     cpu.accumulator = s502_pull_stack();
 }
 
-void s502_pull_status_register_from_stack()
+void s502_pull_status_register_from_stack(void)
 {
     cpu.status_register = s502_pull_stack();
 }
@@ -804,7 +803,7 @@ void s502_branch_overflow_clear(Instruction instruction)
     }
 }
 
-void s502_break()
+void s502_break(void)
 {
     s502_set_psr_flags(B_BIT_FLAG);
     u8 pc_high_byte, pc_low_byte;
