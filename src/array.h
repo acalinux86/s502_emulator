@@ -3,6 +3,8 @@
 
 #define INITIAL_CAPACITY 256
 
+// TODO: Custom Macro Asserts
+
 #define ARRAY(T)                                \
     struct {                                    \
         T* items;                               \
@@ -44,20 +46,20 @@
     } while (0)
 
 // NOTE: Push An Element To A Specified Index in An Array
-#define array_push(array, item, index)                                                                 \
-    do {                                                                                               \
-        if ((array)->count >= (array)->capacity) {                                                     \
+#define array_push(array, item, index)                                  \
+    do {                                                                \
+        if ((array)->count >= (array)->capacity) {                      \
             (array)->capacity = (array)->capacity == 0 ? INITIAL_CAPACITY : (array)->capacity * 2 + 1; \
-            (array)->items = realloc((array)->items, sizeof(*(array)->items)*(array)->capacity);       \
-            assert((array)->items != NULL && "Memory Reallocation For Array Failed.");                 \
-        }                                                                                              \
-        if (index != (array)->count) {                                                                 \
-            for (uint32_t i = (array)->count; i > index; --i) {                                        \
-                (array)->items[i] = (array)->items[i - 1];                                             \
-            }                                                                                          \
-        }                                                                                              \
-        (array)->items[index] = item;                                                                  \
-        (array)->count++;                                                                              \
+            (array)->items = realloc((array)->items, sizeof(*(array)->items)*(array)->capacity); \
+            assert((array)->items != NULL && "Memory Reallocation For Array Failed."); \
+        }                                                               \
+        if (index != (array)->count) {                                  \
+            for (uint32_t i = (array)->count; i > index; --i) {         \
+                (array)->items[i] = (array)->items[i - 1];              \
+            }                                                           \
+        }                                                               \
+        (array)->items[index] = item;                                   \
+        (array)->count++;                                               \
     } while (0)
 
 // NOTE: Append An Item To The Array
