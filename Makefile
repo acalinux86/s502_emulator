@@ -1,5 +1,5 @@
-CC=gcc
-CFLAGS= -Wall -Werror -Wextra -Wswitch-enum -std=c17 -pedantic -ggdb
+CC=clang
+CFLAGS= -Wall -Werror -Wextra -o3 -march=native -Wswitch-enum -std=c99 -pedantic -ggdb
 
 .PHONY: all clean
 all: build/s502
