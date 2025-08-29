@@ -7,6 +7,13 @@
 
 #include "./s502.h"
 
+#define S502_ASSERT(condition, message)                     \
+    do {                                                    \
+        if (!(condition)) {                                 \
+            fprintf(stderr, "CPU FAULT: %s\n", message);    \
+        }                                                   \
+    } while(0)
+
 Opcode_Info opcode_matrix[MAX_U8 + 1] = {
     //-0                  -1          -2            -3              -4         -5         -6                 -7           -8          -9           -A              -B          -C          -D          -E          -F
     {BRK, IMPL},  {ORA, INDX},        {0x00},        {0x00},        {0x00}, {ORA, ZP} ,  {ASL, ZP},      {0x00},  {PHP, IMPL}, {ORA, IMME},   {ASL, ACCU},        {0x00},      {0x00},  {ORA, ABS},   {ASL, ABS},    {0x00}, // 0-
@@ -214,7 +221,7 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
         case OPERAND_LOCATION: {
             // if the operand doesn't contain any page, assumed that it is page zero
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Page Zero Address");
+            S502_ASSERT(location.page == 0x00, "Invalid Page Zero Address");
             return s502_read_memory(cpu, location);
         }
         case OPERAND_ABSOLUTE:
@@ -229,7 +236,7 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Page Zero Address");
+            S502_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
             Location new_loc = { .offset = location.offset + cpu->x, .page = location.page};
             return s502_read_memory(cpu, new_loc);
         }
@@ -291,7 +298,7 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset + cpu->x, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
@@ -311,7 +318,7 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             u8 offset = s502_read_memory(cpu, new_loc);   // fetch low-byte from new_loc
@@ -371,7 +378,7 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Page Zero Address");
+            S502_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
             return (Location) { .offset = location.offset + cpu->x, .page = location.page};
         }
         case OPERAND_ABSOLUTE:
@@ -429,7 +436,7 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset + cpu->x, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             return (Location) {
@@ -448,7 +455,7 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
