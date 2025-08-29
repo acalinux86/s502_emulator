@@ -1,7 +1,7 @@
 #ifndef ARRAY_H_
 #define ARRAY_H_
 
-#define INITIAL_CAPACITY 256
+#define INITIAL_CAPACITY 5
 
 // TODO: Custom Macro Asserts
 
