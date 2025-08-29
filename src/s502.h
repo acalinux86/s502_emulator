@@ -1,17 +1,29 @@
 #ifndef EMULATOR_6502_H_
 #define EMULATOR_6502_H_
 
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
-typedef int32_t  i32;
-
-#define MAX_U8     (UINT8_MAX)
-#define MAX_OFFSET MAX_U8
-#define MAX_PAGES  MAX_U8
+#define MAX_OFFSET UINT8_MAX
+#define MAX_PAGES  UINT8_MAX
+#define ZERO_PAGE  0x00
 #define STACK_PAGE 0x01
+
+#include "./types.h"
+#include "./array.h"
+
+typedef struct Location Location;
+
+typedef u8 (*read_memory)(void *, Location);
+typedef void (*write_memory)(void *, Location, u8);
+
+typedef struct {
+    read_memory read;
+    write_memory write;
+    void *device;
+    u16 start_addr;
+    u16 end_addr;
+    bool readonly;
+} MMap_Entry; // Memory Map
+
+typedef ARRAY(MMap_Entry) MMap_Entries;
 
 typedef struct {
     u8 x; // Register x
@@ -20,11 +32,7 @@ typedef struct {
     u16 program_counter; // Program Counter
     u8 status_register; // Process Status Register
     u8 accumulator; // Accumulator
-
-    // +1 to make it 256
-    // 256 pages
-    // 256 offsets in each page
-    u8 memory[MAX_PAGES + 1][MAX_OFFSET + 1]; // Memory Layout
+    MMap_Entries entries;
 } CPU;
 
 typedef enum {
@@ -146,10 +154,10 @@ typedef enum {
 
 typedef u16 Absolute;
 
-typedef struct {
+struct Location {
     u8 page;
     u8 offset;
-} Location;
+};
 
 typedef union {
     Location loc;
@@ -184,7 +192,7 @@ typedef struct {
 } Opcode_Info;
 
 // Opcode/Mode matrix
-extern Opcode_Info opcode_matrix[MAX_U8 + 1];
+extern Opcode_Info opcode_matrix[UINT8_MAX + 1];
 
 // CPU
 extern CPU cpu;
@@ -227,15 +235,13 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
 
 CPU s502_cpu_init(void);
 
-void s502_dump_page(CPU *cpu, u8 *page);
-void s502_dump_memory(CPU *cpu);
-void s502_print_stats(CPU *cpu);
+u8 s502_read_memory(void *device, Location location);
+void s502_write_memory(void *device, Location location, u8 data);
+u8 s502_cpu_read(CPU *cpu, u16 addr);
+void s502_cpu_write(CPU *cpu, u16 addr, u8 data);
 
 void s502_push_stack(CPU *cpu, u8 value);
 u8 s502_pull_stack(CPU *cpu);
-
-u8 s502_read_memory(CPU *cpu, Location location);
-void s502_write_memory(CPU *cpu, Location location, u8 data);
 
 void s502_set_psr_flags(CPU *cpu, Status_Flags flags);
 void s502_clear_psr_flags(CPU *cpu, Status_Flags flags);

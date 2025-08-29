@@ -14,7 +14,7 @@
         }                                                   \
     } while(0)
 
-Opcode_Info opcode_matrix[MAX_U8 + 1] = {
+Opcode_Info opcode_matrix[UINT8_MAX + 1] = {
     //-0                  -1          -2            -3              -4         -5         -6                 -7           -8          -9           -A              -B          -C          -D          -E          -F
     {BRK, IMPL},  {ORA, INDX},        {0x00},        {0x00},        {0x00}, {ORA, ZP} ,  {ASL, ZP},      {0x00},  {PHP, IMPL}, {ORA, IMME},   {ASL, ACCU},        {0x00},      {0x00},  {ORA, ABS},   {ASL, ABS},    {0x00}, // 0-
     {BPL, REL} ,  {ORA, INDY},        {0x00},        {0x00},        {0x00}, {ORA, ZPX}, {ASL, ZPX},      {0x00},  {CLC, IMPL}, {ORA, ABSY},        {0x00},        {0x00},      {0x00}, {ORA, ABSX},  {ASL, ABSX},    {0x00}, // 1-
@@ -58,6 +58,11 @@ Location u16_to_loc(u16 sixteen_bit)
     return loc;
 }
 
+u16 loc_to_u16(Location loc)
+{
+    return bytes_to_u16(loc.page, loc.offset);
+}
+
 // DEBUG:
 CPU s502_cpu_init(void)
 {
@@ -68,31 +73,62 @@ CPU s502_cpu_init(void)
     cpu.program_counter = 0;
     cpu.status_register = U_BIT_FLAG;
     cpu.stack = 0xFF;
+    array_new(&cpu.entries);
     return cpu;
+}
+
+u8 s502_read_memory(void *device, Location location)
+{
+    u8 *ram = (u8*)device;
+    return ram[bytes_to_u16(location.page, location.offset)];
+}
+
+void s502_write_memory(void *device, Location location, u8 data)
+{
+    u8 *ram = (u8*) device;
+    ram[bytes_to_u16(location.page, location.offset)] = data;
+}
+
+u8 s502_cpu_read(CPU *cpu, u16 addr)
+{
+    for (u8 i = 0; i < cpu->entries.count; ++i) {
+        MMap_Entry *entry = &cpu->entries.items[i];
+        if (addr >= entry->start_addr && addr <= entry->end_addr) {
+            return entry->read(entry->device, u16_to_loc(addr));
+        }
+    }
+
+    UNREACHABLE("addr unreachable");
+}
+
+void s502_cpu_write(CPU *cpu, u16 addr, u8 data)
+{
+    for (u8 i = 0; i < cpu->entries.count; ++i) {
+        MMap_Entry *entry = &cpu->entries.items[i];
+        if (!entry->readonly) {
+            if (addr >= entry->start_addr && addr <= entry->end_addr) {
+                entry->write(entry->device, u16_to_loc(addr), data);
+            }
+        } else {
+            fprintf(stderr, "CPU FAULT: Memory Readonly\n");
+            exit(1);
+        }
+    }
 }
 
 void s502_push_stack(CPU *cpu, u8 value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
-    cpu->memory[STACK_PAGE][cpu->stack] = value;
+    s502_cpu_write(cpu, bytes_to_u16(STACK_PAGE, cpu->stack), value);
     cpu->stack--;
 }
 
 u8 s502_pull_stack(CPU *cpu)
 {
     cpu->stack++;
-    return cpu->memory[STACK_PAGE][cpu->stack];
+    return s502_cpu_read(cpu, bytes_to_u16(STACK_PAGE, cpu->stack));
 }
 
-u8 s502_read_memory(CPU *cpu, Location location)
-{
-    return cpu->memory[location.page][location.offset];
-}
-
-void s502_write_memory(CPU *cpu, Location location, u8 data)
-{
-    cpu->memory[location.page][location.offset] = data;
-}
 
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode)
 {
@@ -222,7 +258,7 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             // if the operand doesn't contain any page, assumed that it is page zero
             Location location = operand.data.address.loc;
             S502_ASSERT(location.page == 0x00, "Invalid Page Zero Address");
-            return s502_read_memory(cpu, location);
+            return s502_cpu_read(cpu, loc_to_u16(location));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -238,7 +274,7 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             Location location = operand.data.address.loc;
             S502_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
             Location new_loc = { .offset = location.offset + cpu->x, .page = location.page};
-            return s502_read_memory(cpu, new_loc);
+            return s502_cpu_read(cpu, loc_to_u16(new_loc));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -252,7 +288,7 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
             Location location = u16_to_loc(absolute);
-            return s502_read_memory(cpu, location);
+            return s502_cpu_read(cpu, loc_to_u16(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -267,7 +303,7 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             Absolute absolute = operand.data.address.absolute;
             Absolute index = absolute + cpu->x;
             Location location = u16_to_loc(index);
-            return s502_read_memory(cpu, location);
+            return s502_cpu_read(cpu, loc_to_u16(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -282,7 +318,7 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             Absolute absolute = operand.data.address.absolute;
             Absolute index = absolute + cpu->y;
             Location location = u16_to_loc(index);
-            return s502_read_memory(cpu, location);
+            return s502_cpu_read(cpu, loc_to_u16(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -302,10 +338,10 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             Location new_loc   = {.offset = location.offset + cpu->x, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
-                .offset = s502_read_memory(cpu, new_loc),   // fetch low-byte from new_loc
-                .page =   s502_read_memory(cpu, new_loc_i), // fetch high-byte from new_loc + 1
+                .offset = s502_cpu_read(cpu, loc_to_u16(new_loc)),   // fetch low-byte from new_loc
+                .page =   s502_cpu_read(cpu, loc_to_u16(new_loc_i)), // fetch high-byte from new_loc + 1
             };
-            return s502_read_memory(cpu, final);
+            return s502_cpu_read(cpu, loc_to_u16(final));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -321,11 +357,11 @@ u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
-            u8 offset = s502_read_memory(cpu, new_loc);   // fetch low-byte from new_loc
-            u8 page =   s502_read_memory(cpu, new_loc_i); // fetch high-byte from new_loc + 1
+            u8 offset = s502_cpu_read(cpu, loc_to_u16(new_loc));   // fetch low-byte from new_loc
+            u8 page =   s502_cpu_read(cpu, loc_to_u16(new_loc_i)); // fetch high-byte from new_loc + 1
             u16 base_addr = bytes_to_u16(page, offset);
             u16 final = base_addr + cpu->y;
-            return s502_read_memory(cpu, u16_to_loc(final));
+            return s502_cpu_read(cpu, final);
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -440,8 +476,8 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
             Location new_loc   = {.offset = location.offset + cpu->x, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             return (Location) {
-                .offset = s502_read_memory(cpu, new_loc),   // fetch low-byte from new_loc
-                .page   = s502_read_memory(cpu, new_loc_i), // fetch high-byte from new_loc + 1
+                .offset = s502_cpu_read(cpu, loc_to_u16(new_loc)),   // fetch low-byte from new_loc
+                .page   = s502_cpu_read(cpu, loc_to_u16(new_loc_i)), // fetch high-byte from new_loc + 1
             };
         }
         case OPERAND_ABSOLUTE:
@@ -459,8 +495,8 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
-                .offset = s502_read_memory(cpu, new_loc),   // fetch low-byte from new_loc
-                .page =   s502_read_memory(cpu, new_loc_i), // fetch high-byte from new_loc + 1
+                .offset = s502_cpu_read(cpu, loc_to_u16(new_loc)),   // fetch low-byte from new_loc
+                .page =   s502_cpu_read(cpu, loc_to_u16(new_loc_i)), // fetch high-byte from new_loc + 1
             };
             final.offset += cpu->y; // final Address that contains the data
             return final;
@@ -495,7 +531,7 @@ void s502_load_register(CPU *cpu, Instruction instruction, u8 *register_type)
 void s502_store_register(CPU *cpu, Instruction instruction, u8 data)
 {
     Location loc = s502_fetch_operand_location(cpu, instruction.mode, instruction.operand);
-    s502_write_memory(cpu, loc, data); // Write Accumulator to memory
+    s502_cpu_write(cpu, loc_to_u16(loc), data);  // Write Accumulator to memory
 }
 
 // A = X | Y, transfer X | Y to A, TXA | TYA
@@ -525,7 +561,7 @@ void s502_add_with_carry(CPU *cpu, Instruction instruction)
     s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG | V_BIT_FLAG);
     if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
-    if (raw > MAX_U8) s502_set_psr_flags(cpu, C_BIT_FLAG);
+    if (raw > UINT8_MAX) s502_set_psr_flags(cpu, C_BIT_FLAG);
     if (~(cpu->accumulator ^ data) & (cpu->accumulator ^ result) & 0x80) {
         s502_set_psr_flags(cpu, V_BIT_FLAG);
     }
@@ -541,7 +577,7 @@ void s502_sub_with_carry(CPU *cpu, Instruction instruction)
     s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG);
     if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
     if (result & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
-    if (raw > MAX_U8) s502_set_psr_flags(cpu, C_BIT_FLAG);
+    if (raw > UINT8_MAX) s502_set_psr_flags(cpu, C_BIT_FLAG);
 
     // NOTE: N_BIT_FLAG = 0x80
     u8 sign_a = cpu->accumulator & N_BIT_FLAG;
@@ -569,8 +605,7 @@ void s502_compare_register_with_data(CPU *cpu, Instruction instruction, u8 regis
 
 void s502_transfer_stack_to_register(CPU *cpu, u8 *data)
 {
-    *data = cpu->memory[STACK_PAGE][cpu->stack];
-
+    *data = s502_cpu_read(cpu, bytes_to_u16(STACK_PAGE, cpu->stack));
     s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
     if (*data == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
     if (*data & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
@@ -657,7 +692,7 @@ void s502_break(CPU *cpu)
     s502_push_stack(cpu, pc_low_byte); // Push lower-byte second
     s502_push_stack(cpu, cpu->status_register); // Push the Process Status register
     // TODO: Make the Interrupt vector a const variable
-    cpu->program_counter = cpu->memory[MAX_PAGES][MAX_OFFSET]; // load the Interrupt Vector into the Program Counter
+    cpu->program_counter = s502_cpu_read(cpu, bytes_to_u16(MAX_PAGES, MAX_OFFSET)); // load the Interrupt Vector into the Program Counter
     printf("Program Interrupted\n");
 }
 
