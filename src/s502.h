@@ -225,14 +225,14 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
         abort();                                                        \
     } while (0)
 
-void s502_cpu_init();
+void s502_cpu_init(void);
 
 void s502_dump_page(u8 *page);
-void s502_dump_memory();
-void s502_print_stats();
+void s502_dump_memory(void);
+void s502_print_stats(void);
 
 void s502_push_stack(u8 value);
-u8 s502_pull_stack();
+u8 s502_pull_stack(void);
 
 u8 s502_read_memory(Location location);
 void s502_write_memory(Location location, u8 data);
@@ -251,11 +251,11 @@ void s502_store_accumulator(Instruction instruction);
 void s502_store_y_register(Instruction instruction);
 void s502_store_x_register(Instruction instruction);
 
-void s502_transfer_x_to_accumulator();
-void s502_transfer_y_to_accumulator();
+void s502_transfer_x_to_accumulator(void);
+void s502_transfer_y_to_accumulator(void);
 
-void s502_transfer_accumulator_to_x();
-void s502_transfer_accumulator_to_y();
+void s502_transfer_accumulator_to_x(void);
+void s502_transfer_accumulator_to_y(void);
 
 void s502_add_with_carry(Instruction instruction);
 void s502_sub_with_carry(Instruction instruction);
@@ -263,13 +263,13 @@ void s502_compare_accumulator_with_data(Instruction instruction);
 void s502_compare_x_register_with_data(Instruction instruction);
 void s502_compare_y_register_with_data(Instruction instruction);
 
-void s502_transfer_stack_to_x();
-void s502_transfer_x_to_stack();
-void s502_transfer_accumulator_to_stack();
-void s502_transfer_status_register_to_stack();
+void s502_transfer_stack_to_x(void);
+void s502_transfer_x_to_stack(void);
+void s502_transfer_accumulator_to_stack(void);
+void s502_transfer_status_register_to_stack(void);
 
-void s502_pull_accumulator_from_stack();
-void s502_pull_status_register_from_stack();
+void s502_pull_accumulator_from_stack(void);
+void s502_pull_status_register_from_stack(void);
 
 void s502_logical_and(Instruction instruction);
 void s502_logical_xor(Instruction instruction);
@@ -285,7 +285,7 @@ void s502_branch_negative_clear(Instruction instruction);
 void s502_branch_overflow_set(Instruction instruction);
 void s502_branch_overflow_clear(Instruction instruction);
 
-void s502_break();
+void s502_break(void);
 bool s502_decode(Instruction instruction);
 
 

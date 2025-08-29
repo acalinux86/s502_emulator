@@ -18,7 +18,7 @@ void opcode_info_as_cstr(Opcode_Info info)
     printf("Opcode: %s, Mode: %s\n", opcode, mode);
 }
 
-Instruction fetch_instruction()
+Instruction fetch_instruction(void)
 {
     Instruction inst = {0};
     Location loc = u16_to_loc(cpu.program_counter);
@@ -41,8 +41,13 @@ Instruction fetch_instruction()
     case ZP:
     case ZPX:
     case ZPY:
-    case REL:
         break;
+    case REL: {
+        Location loc = u16_to_loc(cpu.program_counter);
+        inst.operand.data.data = s502_read_memory(loc);
+        inst.operand.type = OPERAND_DATA;
+        cpu.program_counter++;
+    } break;
     case ABS: {
         Location locs = {0};
         locs = u16_to_loc(cpu.program_counter);
@@ -77,6 +82,7 @@ int main(void)
         0x0,
     };
 
+    s502_cpu_init();
     cpu.memory[0x60][0x30] = 0xA;
     cpu.memory[0x60][0x31] = 0xA;
 
