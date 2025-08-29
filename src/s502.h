@@ -36,7 +36,7 @@ typedef enum {
     I_BIT_FLAG = 0x04, // Interrupt disable bit flag
     Z_BIT_FLAG = 0x02, // Zero bit flag
     C_BIT_FLAG = 0x01, // Carry bit flag
-} PSR_Flags;
+} Status_Flags;
 
 typedef enum {
     IMPL, // IMPLICIT | IMPLIED
@@ -225,68 +225,49 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
         abort();                                                        \
     } while (0)
 
-void s502_cpu_init(void);
+CPU s502_cpu_init(void);
 
-void s502_dump_page(u8 *page);
-void s502_dump_memory(void);
-void s502_print_stats(void);
+void s502_dump_page(CPU *cpu, u8 *page);
+void s502_dump_memory(CPU *cpu);
+void s502_print_stats(CPU *cpu);
 
-void s502_push_stack(u8 value);
-u8 s502_pull_stack(void);
+void s502_push_stack(CPU *cpu, u8 value);
+u8 s502_pull_stack(CPU *cpu);
 
-u8 s502_read_memory(Location location);
-void s502_write_memory(Location location, u8 data);
+u8 s502_read_memory(CPU *cpu, Location location);
+void s502_write_memory(CPU *cpu, Location location, u8 data);
 
-void s502_set_psr_flags(PSR_Flags flags);
-void s502_clear_psr_flags(PSR_Flags flags);
+void s502_set_psr_flags(CPU *cpu, Status_Flags flags);
+void s502_clear_psr_flags(CPU *cpu, Status_Flags flags);
 
-u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand);
-Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand);
+u8 s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand);
+Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand operand);
 
-void s502_load_accumulator(Instruction instruction);
-void s502_load_x_register(Instruction instruction);
-void s502_load_y_register(Instruction instruction);
+void s502_load_register(CPU *cpu, Instruction instruction, u8 *register_type);
+void s502_store_register(CPU *cpu, Instruction instruction, u8 data);
 
-void s502_store_accumulator(Instruction instruction);
-void s502_store_y_register(Instruction instruction);
-void s502_store_x_register(Instruction instruction);
+void s502_transfer_register_to_accumulator(CPU *cpu, u8 data);
+void s502_transfer_accumulator_to_register(CPU *cpu, u8 *register_type);
 
-void s502_transfer_x_to_accumulator(void);
-void s502_transfer_y_to_accumulator(void);
+void s502_add_with_carry(CPU *cpu, Instruction instruction);
+void s502_sub_with_carry(CPU *cpu, Instruction instruction);
 
-void s502_transfer_accumulator_to_x(void);
-void s502_transfer_accumulator_to_y(void);
+void s502_compare_register_with_data(CPU *cpu, Instruction instruction, u8 register_type);
 
-void s502_add_with_carry(Instruction instruction);
-void s502_sub_with_carry(Instruction instruction);
-void s502_compare_accumulator_with_data(Instruction instruction);
-void s502_compare_x_register_with_data(Instruction instruction);
-void s502_compare_y_register_with_data(Instruction instruction);
+void s502_transfer_stack_to_register(CPU *cpu, u8 *data);
+void s502_push_register_to_stack(CPU *cpu, u8 register_type);
+void s502_pull_register_from_stack(CPU *cpu, u8 *register_type);
 
-void s502_transfer_stack_to_x(void);
-void s502_transfer_x_to_stack(void);
-void s502_transfer_accumulator_to_stack(void);
-void s502_transfer_status_register_to_stack(void);
+void s502_logical_and(CPU *cpu, Instruction instruction);
+void s502_logical_xor(CPU *cpu, Instruction instruction);
+void s502_logical_or(CPU *cpu, Instruction instruction);
+void s502_bit_test(CPU *cpu, Instruction instruction);
 
-void s502_pull_accumulator_from_stack(void);
-void s502_pull_status_register_from_stack(void);
+void s502_branch_flag_clear(CPU *cpu, Instruction instruction, Status_Flags flag);
+void s502_branch_flag_set(CPU *cpu, Instruction instruction, Status_Flags flag);
 
-void s502_logical_and(Instruction instruction);
-void s502_logical_xor(Instruction instruction);
-void s502_logical_or(Instruction instruction);
-void s502_bit_test(Instruction instruction);
-
-void s502_branch_carry_clear(Instruction instruction);
-void s502_branch_carry_set(Instruction instruction);
-void s502_branch_zero_set(Instruction instruction);
-void s502_branch_zero_clear(Instruction instruction);
-void s502_branch_negative_set(Instruction instruction);
-void s502_branch_negative_clear(Instruction instruction);
-void s502_branch_overflow_set(Instruction instruction);
-void s502_branch_overflow_clear(Instruction instruction);
-
-void s502_break(void);
-bool s502_decode(Instruction instruction);
+void s502_break(CPU *cpu);
+bool s502_decode(CPU *cpu, Instruction instruction);
 
 
 // Helper functions
