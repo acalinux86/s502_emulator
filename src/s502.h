@@ -194,9 +194,6 @@ typedef struct {
 // Opcode/Mode matrix
 extern Opcode_Info opcode_matrix[UINT8_MAX + 1];
 
-// CPU
-extern CPU cpu;
-
 // Functions Declarations
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode);
 const char *s502_opcode_as_cstr(Opcode opcode);

@@ -214,6 +214,7 @@ const char *s502_opcode_as_cstr(Opcode opcode)
     default:                   return NULL;
     }
 }
+
 const char *s502_operand_type_as_cstr(Operand_Type type)
 {
     switch (type) {
