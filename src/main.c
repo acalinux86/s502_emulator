@@ -9,15 +9,7 @@
 
 #include "./s502.h"
 
-// DEBUG func
-void opcode_info_as_cstr(Opcode_Info info)
-{
-    const char *opcode = s502_opcode_as_cstr(info.opcode);
-    const char *mode   = s502_addr_mode_as_cstr(info.mode);
-    printf("Opcode: %s, Mode: %s\n", opcode, mode);
-}
-
-Instruction fetch_instruction(CPU *cpu)
+Instruction s502_fetch_instruction(CPU *cpu)
 {
     Instruction inst = {0};
     uint8_t data = s502_cpu_read(cpu, cpu->pc);
@@ -63,17 +55,30 @@ Instruction fetch_instruction(CPU *cpu)
     return inst;
 }
 
+typedef ARRAY(uint8_t) U8s;
+
 int main(void)
 {
-    uint8_t instructions[] = {
-        //Op, Mode, Addr
-        0x18,
-        0xA9, 0x00,
-        0x6D, 0x00, 0x00,
-        0x6D, 0x01, 0x00,
-        0x8D, 0x02, 0x00,
-        0x0,
-    };
+    U8s instructions = {0};
+
+    array_append(&instructions, 0x18); // CLC
+
+    array_append(&instructions, 0xA9); // LDA
+    array_append(&instructions, 0x00);
+
+    array_append(&instructions, 0x6D); // ADC
+    array_append(&instructions, 0x00);
+    array_append(&instructions, 0x00);
+
+    array_append(&instructions, 0x6D); // ADC
+    array_append(&instructions, 0x01);
+    array_append(&instructions, 0x00);
+
+    array_append(&instructions, 0x8D); // STA
+    array_append(&instructions, 0x02);
+    array_append(&instructions, 0x00);
+
+    array_append(&instructions, 0x00); // BRK
 
     CPU cpu = s502_cpu_init();
     uint8_t system_ram[0xFFFF] = {0};
@@ -92,13 +97,13 @@ int main(void)
     s502_cpu_write(&cpu, bytes_to_uint16_t(0x00, 0x01), 0xA);
 
     uint16_t addr = bytes_to_uint16_t(0x01, 0xB);
-    for (uint32_t i = 0; i < ARRAY_LEN(instructions); ++i) {
-        s502_cpu_write(&cpu, addr + i, instructions[i]);
+    for (uint32_t i = 0; i < instructions.count; ++i) {
+        s502_cpu_write(&cpu, addr + i, instructions.items[i]);
     }
     cpu.pc = bytes_to_uint16_t(0x01, 0xB);
 
     while (1) {
-        Instruction inst = fetch_instruction(&cpu);
+        Instruction inst = s502_fetch_instruction(&cpu);
         if (!s502_decode(&cpu, inst)) return 1;
         if (inst.opcode == BRK) break;
     }
