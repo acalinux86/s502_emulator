@@ -20,8 +20,8 @@ void opcode_info_as_cstr(Opcode_Info info)
 Instruction fetch_instruction(CPU *cpu)
 {
     Instruction inst = {0};
-    u8 data = s502_cpu_read(cpu, cpu->program_counter);
-    cpu->program_counter++;
+    uint8_t data = s502_cpu_read(cpu, cpu->pc);
+    cpu->pc++;
 
     Opcode_Info info = opcode_matrix[data];
     inst.opcode = info.opcode;
@@ -31,27 +31,27 @@ Instruction fetch_instruction(CPU *cpu)
     case ACCU:
         break;
     case IMME: {
-        inst.operand.data.data = s502_cpu_read(cpu, cpu->program_counter);
+        inst.operand.data.data = s502_cpu_read(cpu, cpu->pc);
         inst.operand.type = OPERAND_DATA;
-        cpu->program_counter++;
+        cpu->pc++;
     } break;
     case ZP:
     case ZPX:
     case ZPY:
         break;
     case REL: {
-        inst.operand.data.data = s502_cpu_read(cpu, cpu->program_counter);
+        inst.operand.data.data = s502_cpu_read(cpu, cpu->pc);
         inst.operand.type = OPERAND_DATA;
-        cpu->program_counter++;
+        cpu->pc++;
     } break;
     case ABS: {
-        u8 page = s502_cpu_read(cpu, cpu->program_counter);
-        cpu->program_counter++;
-        u8 offset = s502_cpu_read(cpu, cpu->program_counter);
-        u16 abs = bytes_to_u16(offset, page);
+        uint8_t page = s502_cpu_read(cpu, cpu->pc);
+        cpu->pc++;
+        uint8_t offset = s502_cpu_read(cpu, cpu->pc);
+        uint16_t abs = bytes_to_uint16_t(offset, page);
         inst.operand.data.address.absolute = abs;
         inst.operand.type = OPERAND_ABSOLUTE;
-        cpu->program_counter++;
+        cpu->pc++;
     } break;
     case ABSX:
     case ABSY:
@@ -65,7 +65,7 @@ Instruction fetch_instruction(CPU *cpu)
 
 int main(void)
 {
-    u8 instructions[] = {
+    uint8_t instructions[] = {
         //Op, Mode, Addr
         0x18,
         0xA9, 0x00,
@@ -76,36 +76,26 @@ int main(void)
     };
 
     CPU cpu = s502_cpu_init();
-    u8 system_ram[2048] = {0};
-    u8 system_rom[1024*32] = {0};
+    uint8_t system_ram[2048] = {0};
 
     MMap_Entry ram = {
         .device = system_ram,
         .read = s502_read_memory,
         .write = s502_write_memory,
         .readonly = false,
-        .start_addr = bytes_to_u16(ZERO_PAGE, ZERO_PAGE),
-        .end_addr = bytes_to_u16(STACK_PAGE, UINT8_MAX),
-    };
-
-    MMap_Entry rom = {
-        .read = s502_read_memory,
-        .device = system_rom,
-        .readonly = true,
-        .start_addr = 0x8000,
-        .end_addr = 0xFFFF,
+        .start_addr = bytes_to_uint16_t(ZERO_PAGE, ZERO_PAGE),
+        .end_addr = bytes_to_uint16_t(STACK_PAGE, UINT8_MAX),
     };
 
     array_append(&cpu.entries, ram);
-    array_append(&cpu.entries, rom);
-    s502_cpu_write(&cpu, bytes_to_u16(0x00, 0x00), 0xA);
-    s502_cpu_write(&cpu, bytes_to_u16(0x00, 0x01), 0xA);
+    s502_cpu_write(&cpu, bytes_to_uint16_t(0x00, 0x00), 0xA);
+    s502_cpu_write(&cpu, bytes_to_uint16_t(0x00, 0x01), 0xA);
 
-    u16 addr = bytes_to_u16(0x01, 0xB);
-    for (u32 i = 0; i < ARRAY_LEN(instructions); ++i) {
+    uint16_t addr = bytes_to_uint16_t(0x01, 0xB);
+    for (uint32_t i = 0; i < ARRAY_LEN(instructions); ++i) {
         s502_cpu_write(&cpu, addr + i, instructions[i]);
     }
-    cpu.program_counter = bytes_to_u16(0x01, 0xB);
+    cpu.pc = bytes_to_uint16_t(0x01, 0xB);
 
     while (1) {
         Instruction inst = fetch_instruction(&cpu);
