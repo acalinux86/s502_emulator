@@ -76,15 +76,15 @@ int main(void)
     };
 
     CPU cpu = s502_cpu_init();
-    uint8_t system_ram[2048] = {0};
+    uint8_t system_ram[0xFFFF] = {0};
 
     MMap_Entry ram = {
         .device = system_ram,
         .read = s502_read_memory,
         .write = s502_write_memory,
         .readonly = false,
-        .start_addr = bytes_to_uint16_t(ZERO_PAGE, ZERO_PAGE),
-        .end_addr = bytes_to_uint16_t(STACK_PAGE, UINT8_MAX),
+        .start_addr = 0X0000,
+        .end_addr = 0XFFFF,
     };
 
     array_append(&cpu.entries, ram);
@@ -102,6 +102,6 @@ int main(void)
         if (!s502_decode(&cpu, inst)) return 1;
         if (inst.opcode == BRK) break;
     }
-
+    printf("Result: %u\n", s502_cpu_read(&cpu, bytes_to_uint16_t(0x00, 0x02)));
     return 0;
 }
