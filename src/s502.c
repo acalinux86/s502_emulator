@@ -98,7 +98,8 @@ uint8_t s502_cpu_read(CPU *cpu, uint16_t addr)
         }
     }
 
-    UNREACHABLE("addr");
+    fprintf(stderr, "ERROR: Address Read From Unmapped Memory: 0x%04x\n", addr);
+    return 0;
 }
 
 void s502_cpu_write(CPU *cpu, uint16_t addr, uint8_t data)

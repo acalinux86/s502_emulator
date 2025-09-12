@@ -45,10 +45,10 @@ Instruction fetch_instruction(CPU *cpu)
         cpu->pc++;
     } break;
     case ABS: {
-        uint8_t page = s502_cpu_read(cpu, cpu->pc);
-        cpu->pc++;
         uint8_t offset = s502_cpu_read(cpu, cpu->pc);
-        uint16_t abs = bytes_to_uint16_t(offset, page);
+        cpu->pc++;
+        uint8_t page = s502_cpu_read(cpu, cpu->pc);
+        uint16_t abs = bytes_to_uint16_t(page, offset);
         inst.operand.data.address.absolute = abs;
         inst.operand.type = OPERAND_ABSOLUTE;
         cpu->pc++;
