@@ -8,7 +8,6 @@
 #include <ctype.h>
 
 #include "./s502.h"
-#include "./array.h"
 
 // DEBUG func
 void opcode_info_as_cstr(Opcode_Info info)
@@ -18,12 +17,11 @@ void opcode_info_as_cstr(Opcode_Info info)
     printf("Opcode: %s, Mode: %s\n", opcode, mode);
 }
 
-Instruction fetch_instruction(void)
+Instruction fetch_instruction(CPU *cpu)
 {
     Instruction inst = {0};
-    Location loc = u16_to_loc(cpu.program_counter);
-    u8 data = s502_read_memory(loc);
-    cpu.program_counter++;
+    uint8_t data = s502_cpu_read(cpu, cpu->pc);
+    cpu->pc++;
 
     Opcode_Info info = opcode_matrix[data];
     inst.opcode = info.opcode;
@@ -33,32 +31,27 @@ Instruction fetch_instruction(void)
     case ACCU:
         break;
     case IMME: {
-        Location locs = u16_to_loc(cpu.program_counter);
-        inst.operand.data.data = s502_read_memory(locs);
+        inst.operand.data.data = s502_cpu_read(cpu, cpu->pc);
         inst.operand.type = OPERAND_DATA;
-        cpu.program_counter++;
+        cpu->pc++;
     } break;
     case ZP:
     case ZPX:
     case ZPY:
         break;
     case REL: {
-        Location loc = u16_to_loc(cpu.program_counter);
-        inst.operand.data.data = s502_read_memory(loc);
+        inst.operand.data.data = s502_cpu_read(cpu, cpu->pc);
         inst.operand.type = OPERAND_DATA;
-        cpu.program_counter++;
+        cpu->pc++;
     } break;
     case ABS: {
-        Location locs = {0};
-        locs = u16_to_loc(cpu.program_counter);
-        u8 page = s502_read_memory(locs);
-        cpu.program_counter++;
-        locs = u16_to_loc(cpu.program_counter);
-        u8 offset = s502_read_memory(locs);
-        u16 abs = bytes_to_u16(offset, page);
+        uint8_t offset = s502_cpu_read(cpu, cpu->pc);
+        cpu->pc++;
+        uint8_t page = s502_cpu_read(cpu, cpu->pc);
+        uint16_t abs = bytes_to_uint16_t(page, offset);
         inst.operand.data.address.absolute = abs;
         inst.operand.type = OPERAND_ABSOLUTE;
-        cpu.program_counter++;
+        cpu->pc++;
     } break;
     case ABSX:
     case ABSY:
@@ -72,36 +65,43 @@ Instruction fetch_instruction(void)
 
 int main(void)
 {
-    u8 instructions[] = {
+    uint8_t instructions[] = {
         //Op, Mode, Addr
         0x18,
         0xA9, 0x00,
-        0x6D, 0x30, 0x60,
-        0x6D, 0x31, 0x60,
-        0x8D, 0x32, 0x60,
+        0x6D, 0x00, 0x00,
+        0x6D, 0x01, 0x00,
+        0x8D, 0x02, 0x00,
         0x0,
     };
 
-    s502_cpu_init();
-    cpu.memory[0x60][0x30] = 0xA;
-    cpu.memory[0x60][0x31] = 0xA;
+    CPU cpu = s502_cpu_init();
+    uint8_t system_ram[0xFFFF] = {0};
 
-    u16 addr = 0x8080;
-    for (u32 i = 0; i < ARRAY_LEN(instructions); ++i) {
-        Location loc = u16_to_loc(addr + i);
-        s502_write_memory(loc, instructions[i]);
+    MMap_Entry ram = {
+        .device = system_ram,
+        .read = s502_read_memory,
+        .write = s502_write_memory,
+        .readonly = false,
+        .start_addr = 0X0000,
+        .end_addr = 0XFFFF,
+    };
+
+    array_append(&cpu.entries, ram);
+    s502_cpu_write(&cpu, bytes_to_uint16_t(0x00, 0x00), 0xA);
+    s502_cpu_write(&cpu, bytes_to_uint16_t(0x00, 0x01), 0xA);
+
+    uint16_t addr = bytes_to_uint16_t(0x01, 0xB);
+    for (uint32_t i = 0; i < ARRAY_LEN(instructions); ++i) {
+        s502_cpu_write(&cpu, addr + i, instructions[i]);
     }
-    cpu.program_counter = 0x8080;
+    cpu.pc = bytes_to_uint16_t(0x01, 0xB);
 
     while (1) {
-        Instruction inst = fetch_instruction();
-        if (!s502_decode(inst)) return 1;
+        Instruction inst = fetch_instruction(&cpu);
+        if (!s502_decode(&cpu, inst)) return 1;
         if (inst.opcode == BRK) break;
     }
-
-    s502_dump_page(cpu.memory[0x80]);
-    printf("-------------------------\n");
-    s502_dump_page(cpu.memory[0x60]);
-    s502_print_stats();
+    printf("Result: %u\n", s502_cpu_read(&cpu, bytes_to_uint16_t(0x00, 0x02)));
     return 0;
 }

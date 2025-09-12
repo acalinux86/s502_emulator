@@ -1,30 +1,37 @@
 #ifndef EMULATOR_6502_H_
 #define EMULATOR_6502_H_
 
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
-typedef int32_t  i32;
-
-#define MAX_U8     (UINT8_MAX)
-#define MAX_OFFSET MAX_U8
-#define MAX_PAGES  MAX_U8
+#define MAX_OFFSET UINT8_MAX
+#define MAX_PAGES  UINT8_MAX
+#define ZERO_PAGE  0x00
 #define STACK_PAGE 0x01
 
-typedef struct {
-    u8 x; // Register x
-    u8 y; // Register y
-    u8 stack; // Stack pointer
-    u16 program_counter; // Program Counter
-    u8 status_register; // Process Status Register
-    u8 accumulator; // Accumulator
+#include "./array.h"
 
-    // +1 to make it 256
-    // 256 pages
-    // 256 offsets in each page
-    u8 memory[MAX_PAGES + 1][MAX_OFFSET + 1]; // Memory Layout
+typedef struct Location Location;
+
+typedef uint8_t (*read_memory)(void *, Location);
+typedef void (*write_memory)(void *, Location, uint8_t);
+
+typedef struct {
+    read_memory read;
+    write_memory write;
+    void *device;
+    uint16_t start_addr;
+    uint16_t end_addr;
+    bool readonly;
+} MMap_Entry; // Memory Map
+
+typedef ARRAY(MMap_Entry) MMap_Entries;
+
+typedef struct {
+    uint8_t  regx; // Reg x
+    uint8_t  regy; // Reg y
+    uint8_t  racc; // Accumulator
+    uint8_t  sp;   // Stack pointer
+    uint16_t pc;   // Program Counter
+    uint8_t  psr;  // Process Status Reg
+    MMap_Entries entries;
 } CPU;
 
 typedef enum {
@@ -36,20 +43,20 @@ typedef enum {
     I_BIT_FLAG = 0x04, // Interrupt disable bit flag
     Z_BIT_FLAG = 0x02, // Zero bit flag
     C_BIT_FLAG = 0x01, // Carry bit flag
-} PSR_Flags;
+} Status_Flags;
 
 typedef enum {
     IMPL, // IMPLICIT | IMPLIED
     ACCU, // ACCUMULATOR
     IMME, // IMMEDIATE
-    ZP, // ZERO_PAGE
-    ZPX, // ZERO_PAGE_X
-    ZPY, // ZERO_PAGE_Y
-    REL, // RELATIVE
-    ABS, // ABSOLUTE
+    ZP,   // ZERO_PAGE
+    ZPX,  // ZERO_PAGE_X
+    ZPY,  // ZERO_PAGE_Y
+    REL,  // RELATIVE
+    ABS,  // ABSOLUTE
     ABSX, // ABSOLUTE_X
     ABSY, // ABSOLUTE_Y
-    IND, // INDIRECT
+    IND,  // INDIRECT
     INDX, // INDIRECT_X
     INDY, // INDIRECT_Y
 } Addressing_Modes;
@@ -99,7 +106,7 @@ typedef enum {
     EOR,
     BIT,
 
-    // Register Transfers
+    // Reg Transfers
     TAX,
     TAY,
     TXA,
@@ -144,12 +151,12 @@ typedef enum {
     ERROR_FETCH_LOCATION,
 } Opcode;
 
-typedef u16 Absolute;
+typedef uint16_t Absolute;
 
-typedef struct {
-    u8 page;
-    u8 offset;
-} Location;
+struct Location {
+    uint8_t page;
+    uint8_t offset;
+};
 
 typedef union {
     Location loc;
@@ -164,7 +171,7 @@ typedef enum {
 
 typedef union {
     Address address;
-    u8 data;
+    uint8_t data;
 } Operand_Data;
 
 typedef struct {
@@ -184,10 +191,7 @@ typedef struct {
 } Opcode_Info;
 
 // Opcode/Mode matrix
-extern Opcode_Info opcode_matrix[MAX_U8 + 1];
-
-// CPU
-extern CPU cpu;
+extern Opcode_Info opcode_matrix[UINT8_MAX + 1];
 
 // Functions Declarations
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode);
@@ -225,72 +229,51 @@ const char *s502_operand_type_as_cstr(Operand_Type type);
         abort();                                                        \
     } while (0)
 
-void s502_cpu_init(void);
+CPU s502_cpu_init(void);
 
-void s502_dump_page(u8 *page);
-void s502_dump_memory(void);
-void s502_print_stats(void);
+uint8_t s502_read_memory(void *device, Location location);
+void s502_write_memory(void *device, Location location, uint8_t data);
+uint8_t s502_cpu_read(CPU *cpu, uint16_t addr);
+void s502_cpu_write(CPU *cpu, uint16_t addr, uint8_t data);
 
-void s502_push_stack(u8 value);
-u8 s502_pull_stack(void);
+void s502_push_stack(CPU *cpu, uint8_t value);
+uint8_t s502_pull_stack(CPU *cpu);
 
-u8 s502_read_memory(Location location);
-void s502_write_memory(Location location, u8 data);
+void s502_set_psr_flags(CPU *cpu, Status_Flags flags);
+void s502_clear_psr_flags(CPU *cpu, Status_Flags flags);
 
-void s502_set_psr_flags(PSR_Flags flags);
-void s502_clear_psr_flags(PSR_Flags flags);
+uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand);
+Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand operand);
 
-u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand);
-Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand);
+void s502_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type);
+void s502_store_reg(CPU *cpu, Instruction instruction, uint8_t data);
 
-void s502_load_accumulator(Instruction instruction);
-void s502_load_x_register(Instruction instruction);
-void s502_load_y_register(Instruction instruction);
+void s502_transfer_reg_to_accumulator(CPU *cpu, uint8_t data);
+void s502_transfer_accumulator_to_reg(CPU *cpu, uint8_t *reg_type);
 
-void s502_store_accumulator(Instruction instruction);
-void s502_store_y_register(Instruction instruction);
-void s502_store_x_register(Instruction instruction);
+void s502_add_with_carry(CPU *cpu, Instruction instruction);
+void s502_sub_with_carry(CPU *cpu, Instruction instruction);
 
-void s502_transfer_x_to_accumulator(void);
-void s502_transfer_y_to_accumulator(void);
+void s502_compare_reg_with_data(CPU *cpu, Instruction instruction, uint8_t reg_type);
 
-void s502_transfer_accumulator_to_x(void);
-void s502_transfer_accumulator_to_y(void);
+void s502_transfer_stack_to_reg(CPU *cpu, uint8_t *data);
+void s502_push_reg_to_stack(CPU *cpu, uint8_t reg_type);
+void s502_pull_reg_from_stack(CPU *cpu, uint8_t *reg_type);
 
-void s502_add_with_carry(Instruction instruction);
-void s502_sub_with_carry(Instruction instruction);
-void s502_compare_accumulator_with_data(Instruction instruction);
-void s502_compare_x_register_with_data(Instruction instruction);
-void s502_compare_y_register_with_data(Instruction instruction);
+void s502_logical_and(CPU *cpu, Instruction instruction);
+void s502_logical_xor(CPU *cpu, Instruction instruction);
+void s502_logical_or(CPU *cpu, Instruction instruction);
+void s502_bit_test(CPU *cpu, Instruction instruction);
 
-void s502_transfer_stack_to_x(void);
-void s502_transfer_x_to_stack(void);
-void s502_transfer_accumulator_to_stack(void);
-void s502_transfer_status_register_to_stack(void);
+void s502_branch_flag_clear(CPU *cpu, Instruction instruction, Status_Flags flag);
+void s502_branch_flag_set(CPU *cpu, Instruction instruction, Status_Flags flag);
 
-void s502_pull_accumulator_from_stack(void);
-void s502_pull_status_register_from_stack(void);
-
-void s502_logical_and(Instruction instruction);
-void s502_logical_xor(Instruction instruction);
-void s502_logical_or(Instruction instruction);
-void s502_bit_test(Instruction instruction);
-
-void s502_branch_carry_clear(Instruction instruction);
-void s502_branch_carry_set(Instruction instruction);
-void s502_branch_zero_set(Instruction instruction);
-void s502_branch_zero_clear(Instruction instruction);
-void s502_branch_negative_set(Instruction instruction);
-void s502_branch_negative_clear(Instruction instruction);
-void s502_branch_overflow_set(Instruction instruction);
-void s502_branch_overflow_clear(Instruction instruction);
-
-void s502_break(void);
-bool s502_decode(Instruction instruction);
+void s502_break(CPU *cpu);
+bool s502_decode(CPU *cpu, Instruction instruction);
 
 
 // Helper functions
-void u16_to_bytes(u16 sixteen_bit, u8 *high_byte, u8 *low_byte);
-u16 bytes_to_u16(u8 a, u8 b);
-Location u16_to_loc(u16 sixteen_bit);
+void uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte);
+uint16_t bytes_to_uint16_t(uint8_t a, uint8_t b);
+Location uint16_t_to_loc(uint16_t sixteen_bit);
 #endif // EMULATOR_6502_H_

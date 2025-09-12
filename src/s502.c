@@ -7,7 +7,14 @@
 
 #include "./s502.h"
 
-Opcode_Info opcode_matrix[MAX_U8 + 1] = {
+#define S502_ASSERT(condition, message)                     \
+    do {                                                    \
+        if (!(condition)) {                                 \
+            fprintf(stderr, "CPU FAULT: %s\n", message);    \
+        }                                                   \
+    } while(0)
+
+Opcode_Info opcode_matrix[UINT8_MAX + 1] = {
     //-0                  -1          -2            -3              -4         -5         -6                 -7           -8          -9           -A              -B          -C          -D          -E          -F
     {BRK, IMPL},  {ORA, INDX},        {0x00},        {0x00},        {0x00}, {ORA, ZP} ,  {ASL, ZP},      {0x00},  {PHP, IMPL}, {ORA, IMME},   {ASL, ACCU},        {0x00},      {0x00},  {ORA, ABS},   {ASL, ABS},    {0x00}, // 0-
     {BPL, REL} ,  {ORA, INDY},        {0x00},        {0x00},        {0x00}, {ORA, ZPX}, {ASL, ZPX},      {0x00},  {CLC, IMPL}, {ORA, ABSY},        {0x00},        {0x00},      {0x00}, {ORA, ABSX},  {ASL, ABSX},    {0x00}, // 1-
@@ -27,72 +34,102 @@ Opcode_Info opcode_matrix[MAX_U8 + 1] = {
     {BEQ, REL} ,  {SBC, INDY},        {0x00},        {0x00},        {0x00}, {SBC, ZPX}, {INC, ZPX},      {0x00},  {SED, IMPL}, {SBC, ABSY},        {0x00},        {0x00},      {0x00}, {SBC, ABSX},  {INC, ABSX},    {0x00}, // F-
 };
 
-CPU cpu = {0};
+// Helper Functions
+void uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte)
+{
+    *high_byte = sixteen_bit >> 8; // higher byte
+    *low_byte  = sixteen_bit & 0xFF; // low-byte
+}
+
+// a must be the higher-byte and b the lower-byte
+uint16_t bytes_to_uint16_t(uint8_t a, uint8_t b)
+{
+    return (a << 8) | b;
+}
+
+Location uint16_t_to_loc(uint16_t sixteen_bit)
+{
+    uint8_t high_byte, low_byte;
+    uint16_t_to_bytes(sixteen_bit, &high_byte, &low_byte);
+    Location loc = {
+        .page = high_byte, // higher byte
+        .offset = low_byte, // low-byte
+    };
+    return loc;
+}
+
+uint16_t loc_to_uint16_t(Location loc)
+{
+    return bytes_to_uint16_t(loc.page, loc.offset);
+}
 
 // DEBUG:
-void s502_cpu_init(void)
+CPU s502_cpu_init(void)
 {
-    cpu.program_counter = 0;
-    cpu.status_register = U_BIT_FLAG;
-    cpu.stack = 0xFF;
-    memset(cpu.memory, 0, sizeof(cpu.memory));
-    cpu.x = 0;
-    cpu.y = 0;
-    cpu.accumulator = 0;
+    CPU cpu = {0};
+    cpu.regx = 0;
+    cpu.regy = 0;
+    cpu.racc = 0;
+    cpu.pc = 0;
+    cpu.pc = U_BIT_FLAG;
+    cpu.sp = 0xFF;
+    array_new(&cpu.entries);
+    return cpu;
 }
 
-void s502_dump_page(u8 *page)
+uint8_t s502_read_memory(void *device, Location location)
 {
-    u8 page_width = 16;
-    u8 page_height = 16;
-    for (u8 i = 0; i < page_width; ++i) {
-        for (u8 j = 0; j < page_height; ++j) {
-            printf("0X%02X ", page[i * page_height + j]);
+    uint8_t *ram = (uint8_t*)device;
+    return ram[bytes_to_uint16_t(location.page, location.offset)];
+}
+
+void s502_write_memory(void *device, Location location, uint8_t data)
+{
+    uint8_t *ram = (uint8_t*) device;
+    ram[bytes_to_uint16_t(location.page, location.offset)] = data;
+}
+
+uint8_t s502_cpu_read(CPU *cpu, uint16_t addr)
+{
+    for (uint8_t i = 0; i < cpu->entries.count; ++i) {
+        MMap_Entry *entry = &cpu->entries.items[i];
+        if (addr >= entry->start_addr && addr <= entry->end_addr) {
+            return entry->read(entry->device, uint16_t_to_loc(addr));
         }
-        printf("\n");
+    }
+
+    fprintf(stderr, "ERROR: Address Read From Unmapped Memory: 0x%04x\n", addr);
+    return 0;
+}
+
+void s502_cpu_write(CPU *cpu, uint16_t addr, uint8_t data)
+{
+    for (uint8_t i = 0; i < cpu->entries.count; ++i) {
+        MMap_Entry *entry = &cpu->entries.items[i];
+        if (!entry->readonly) {
+            if (addr >= entry->start_addr && addr <= entry->end_addr) {
+                entry->write(entry->device, uint16_t_to_loc(addr), data);
+            }
+        } else {
+            fprintf(stderr, "CPU FAULT: Memory Readonly\n");
+            exit(1);
+        }
     }
 }
 
-void s502_push_stack(u8 value)
+void s502_push_stack(CPU *cpu, uint8_t value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
-    cpu.memory[STACK_PAGE][cpu.stack] = value;
-    cpu.stack--;
+    s502_cpu_write(cpu, bytes_to_uint16_t(STACK_PAGE, cpu->sp), value);
+    cpu->sp--;
 }
 
-u8 s502_pull_stack(void)
+uint8_t s502_pull_stack(CPU *cpu)
 {
-    cpu.stack++;
-    return cpu.memory[STACK_PAGE][cpu.stack];
+    cpu->sp++;
+    return s502_cpu_read(cpu, bytes_to_uint16_t(STACK_PAGE, cpu->sp));
 }
 
-void s502_dump_memory(void)
-{
-    for (u8 i = 0; i < MAX_PAGES; ++i) {
-        s502_dump_page(cpu.memory[i]);
-    }
-}
-
-// NOTE: Print Stats
-void s502_print_stats(void)
-{
-    printf("Stack       : %u\n", cpu.stack);
-    printf("X           : %u\n", cpu.x);
-    printf("Y           : %u\n", cpu.y);
-    printf("Accumulator : %u\n", cpu.accumulator);
-    printf("PC          : %u\n", cpu.program_counter);
-    printf("PSR         : %u\n", cpu.status_register);
-}
-
-u8 s502_read_memory(Location location)
-{
-    return cpu.memory[location.page][location.offset];
-}
-
-void s502_write_memory(Location location, u8 data)
-{
-    cpu.memory[location.page][location.offset] = data;
-}
 
 const char *s502_addr_mode_as_cstr(Addressing_Modes mode)
 {
@@ -178,6 +215,7 @@ const char *s502_opcode_as_cstr(Opcode opcode)
     default:                   return NULL;
     }
 }
+
 const char *s502_operand_type_as_cstr(Operand_Type type)
 {
     switch (type) {
@@ -189,42 +227,19 @@ const char *s502_operand_type_as_cstr(Operand_Type type)
 }
 
 // NOTE: Set PSR FLAGS
-void s502_set_psr_flags(PSR_Flags flags)
+void s502_set_psr_flags(CPU *cpu, Status_Flags flags)
 {
-    cpu.status_register |= flags;
+    cpu->psr |= flags;
 }
 
 // NOTE: Clear PSR FLAGS
-void s502_clear_psr_flags(PSR_Flags flags)
+void s502_clear_psr_flags(CPU *cpu, Status_Flags flags)
 {
-    cpu.status_register &= (~flags);
-}
-
-void u16_to_bytes(u16 sixteen_bit, u8 *high_byte, u8 *low_byte)
-{
-    *high_byte = sixteen_bit >> 8; // higher byte
-    *low_byte  = sixteen_bit & 0xFF; // low-byte
-}
-
-// a must be the higher-byte and b the lower-byte
-u16 bytes_to_u16(u8 a, u8 b)
-{
-    return (a << 8) | b;
-}
-
-Location u16_to_loc(u16 sixteen_bit)
-{
-    u8 high_byte, low_byte;
-    u16_to_bytes(sixteen_bit, &high_byte, &low_byte);
-    Location loc = {
-        .page = high_byte, // higher byte
-        .offset = low_byte, // low-byte
-    };
-    return loc;
+    cpu->psr &= (~flags);
 }
 
 // Returns data for read opcodes
-u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
+uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
 {
     switch (mode) {
     case IMME: {
@@ -244,8 +259,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         case OPERAND_LOCATION: {
             // if the operand doesn't contain any page, assumed that it is page zero
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Page Zero Address");
-            return s502_read_memory(location);
+            S502_ASSERT(location.page == 0x00, "Invalid Page Zero Address");
+            return s502_cpu_read(cpu, loc_to_uint16_t(location));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -254,14 +269,14 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
     } break;
 
     case ZPX: {
-        // zero page X modes sums x register to the zero page operand and uses it as index
+        // zero page X modes sums x reg to the zero page operand and uses it as index
         // It wraps around incase it exceeds page MAX_OFFSET
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Page Zero Address");
-            Location new_loc = { .offset = location.offset + cpu.x, .page = location.page};
-            return s502_read_memory(new_loc);
+            S502_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
+            Location new_loc = { .offset = location.offset + cpu->regx, .page = location.page};
+            return s502_cpu_read(cpu, loc_to_uint16_t(new_loc));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -274,8 +289,8 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Location location = u16_to_loc(absolute);
-            return s502_read_memory(location);
+            Location location = uint16_t_to_loc(absolute);
+            return s502_cpu_read(cpu, loc_to_uint16_t(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -284,13 +299,13 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
     } break;
 
     case ABSX: {
-        // absolute but += X register
+        // absolute but += X reg
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + cpu.x;
-            Location location = u16_to_loc(index);
-            return s502_read_memory(location);
+            Absolute index = absolute + cpu->regx;
+            Location location = uint16_t_to_loc(index);
+            return s502_cpu_read(cpu, loc_to_uint16_t(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -299,13 +314,13 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
     } break;
 
     case ABSY: {
-        // absolute but += Y register
+        // absolute but += Y reg
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + cpu.y;
-            Location location = u16_to_loc(index);
-            return s502_read_memory(location);
+            Absolute index = absolute + cpu->regy;
+            Location location = uint16_t_to_loc(index);
+            return s502_cpu_read(cpu, loc_to_uint16_t(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -314,21 +329,21 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
     } break;
 
     case INDX: {
-        // Adds X register to the offset of the location in the instruction
+        // Adds X reg to the offset of the location in the instruction
         // Fetches the data pointed by the modified location
         // Uses that data as a new location to index into memory and fetches low-byte
         // Uses the modified location.offset + 1 to index into memory and fetches high-byte
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Zero Page Address");
-            Location new_loc   = {.offset = location.offset + cpu.x, .page = location.page};
+            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
+            Location new_loc   = {.offset = location.offset + cpu->regx, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
-                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
-                .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
+                .offset = s502_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
+                .page =   s502_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
             };
-            return s502_read_memory(final);
+            return s502_cpu_read(cpu, loc_to_uint16_t(final));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -337,18 +352,18 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
     } break;
 
     case INDY: {
-        // same as index indirect but the addition of the Y register occurs in the final address
+        // same as index indirect but the addition of the Y reg occurs in the final address
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
-            u8 offset = s502_read_memory(new_loc);   // fetch low-byte from new_loc
-            u8 page =   s502_read_memory(new_loc_i); // fetch high-byte from new_loc + 1
-            u16 base_addr = bytes_to_u16(page, offset);
-            u16 final = base_addr + cpu.y;
-            return s502_read_memory(u16_to_loc(final));
+            uint8_t offset = s502_cpu_read(cpu, loc_to_uint16_t(new_loc));   // fetch low-byte from new_loc
+            uint8_t page =   s502_cpu_read(cpu, loc_to_uint16_t(new_loc_i)); // fetch high-byte from new_loc + 1
+            uint16_t base_addr = bytes_to_uint16_t(page, offset);
+            uint16_t final = base_addr + cpu->regy;
+            return s502_cpu_read(cpu, final);
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -380,7 +395,7 @@ u8 s502_fetch_operand_data(Addressing_Modes mode, Operand operand)
 }
 
 // Returns A Location for store opcodes
-Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
+Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand operand)
 {
     switch (mode) {
     case ZP: {
@@ -396,13 +411,13 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
     } break;
 
     case ZPX: {
-        // zero page X modes sums x register to the zero page operand and uses it as index
+        // zero page X modes sums x reg to the zero page operand and uses it as index
         // It wraps around incase it exceeds page MAX_OFFSET
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Page Zero Address");
-            return (Location) { .offset = location.offset + cpu.x, .page = location.page};
+            S502_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
+            return (Location) { .offset = location.offset + cpu->regx, .page = location.page};
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -415,7 +430,7 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            return u16_to_loc(absolute);
+            return uint16_t_to_loc(absolute);
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -424,12 +439,12 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
     } break;
 
     case ABSX: {
-        // absolute but += X register
+        // absolute but += X reg
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + cpu.x;
-            return u16_to_loc(index);
+            Absolute index = absolute + cpu->regx;
+            return uint16_t_to_loc(index);
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -438,12 +453,12 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
     } break;
 
     case ABSY: {
-        // absolute but += Y register
+        // absolute but += Y reg
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + cpu.y;
-            return u16_to_loc(index);
+            Absolute index = absolute + cpu->regy;
+            return uint16_t_to_loc(index);
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -452,19 +467,19 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
     } break;
 
     case INDX: {
-        // Adds X register to the offset of the location in the instruction
+        // Adds X reg to the offset of the location in the instruction
         // Fetches the data pointed by the modified location
         // Uses that data as a new location to index into memory and fetches low-byte
         // Uses the modified location.offset + 1 to index into memory and fetches high-byte
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Zero Page Address");
-            Location new_loc   = {.offset = location.offset + cpu.x, .page = location.page};
+            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
+            Location new_loc   = {.offset = location.offset + cpu->regx, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             return (Location) {
-                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
-                .page   = s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
+                .offset = s502_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
+                .page   = s502_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
             };
         }
         case OPERAND_ABSOLUTE:
@@ -474,18 +489,18 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
     } break;
 
     case INDY: {
-        // same as index indirect but the addition of the Y register occurs in the final address
+        // same as index indirect but the addition of the Y reg occurs in the final address
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            assert(location.page == 0x00 && "Invalid Zero Page Address");
+            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
-                .offset = s502_read_memory(new_loc),   // fetch low-byte from new_loc
-                .page =   s502_read_memory(new_loc_i), // fetch high-byte from new_loc + 1
+                .offset = s502_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
+                .page =   s502_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
             };
-            final.offset += cpu.y; // final Address that contains the data
+            final.offset += cpu->regy; // final Address that contains the data
             return final;
         }
         case OPERAND_ABSOLUTE:
@@ -505,369 +520,236 @@ Location s502_fetch_operand_location(Addressing_Modes mode, Operand operand)
     UNREACHABLE("s502_fetch_operand_location");
 }
 
-// A, Z , N = M, memory into Accumulator
-void s502_load_accumulator(Instruction instruction)
+// Reg , Z , N = M, memory into Reg
+void s502_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type)
 {
-    cpu.accumulator = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.accumulator & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+    *reg_type = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (*reg_type == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (*reg_type & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-// X,Z,N = M
-void s502_load_x_register(Instruction instruction)
+// M = A | X | Y, store A | X | Y into memory
+void s502_store_reg(CPU *cpu, Instruction instruction, uint8_t data)
 {
-    cpu.x = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.x == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.x & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+    Location loc = s502_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    s502_cpu_write(cpu, loc_to_uint16_t(loc), data);  // Write Accumulator to memory
 }
 
-// Y,Z,N =  M
-void s502_load_y_register(Instruction instruction)
+// A = X | Y, transfer X | Y to A, TXA | TYA
+void s502_transfer_reg_to_accumulator(CPU *cpu, uint8_t data)
 {
-    cpu.y = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.y == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.y & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+    cpu->racc = data;
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu->racc == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (cpu->racc & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-// M = A, store accumulator into memory
-void s502_store_accumulator(Instruction instruction)
+// X | Y = A, transfer Accumulator to X | Y, TAX | TAY
+void s502_transfer_accumulator_to_reg(CPU *cpu, uint8_t *reg_type)
 {
-    Location loc = s502_fetch_operand_location(instruction.mode, instruction.operand);
-    s502_write_memory(loc, cpu.accumulator); // Write Accumulator to memory
+    *reg_type = cpu->racc;
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (*reg_type == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (*reg_type & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-// M = Y, store accumulator into memory
-void s502_store_y_register(Instruction instruction)
+void s502_add_with_carry(CPU *cpu, Instruction instruction)
 {
-    Location loc = s502_fetch_operand_location(instruction.mode, instruction.operand);
-    s502_write_memory(loc, cpu.y); // Write Y to memory
-}
+    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint16_t raw = data + cpu->racc + (cpu->psr & C_BIT_FLAG);
+    uint8_t result = (uint8_t) raw;
 
-// M = X, store accumulator into memory
-void s502_store_x_register(Instruction instruction)
-{
-    Location loc = s502_fetch_operand_location(instruction.mode, instruction.operand);
-    s502_write_memory(loc, cpu.x); // Write X to memory
-}
-
-// A = X, transfer X to A, TXA
-void s502_transfer_x_to_accumulator(void)
-{
-    cpu.accumulator = cpu.x;
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.accumulator & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
-}
-
-// A = Y, transfer Y to A, TYA
-void s502_transfer_y_to_accumulator(void)
-{
-    cpu.accumulator = cpu.y;
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.accumulator == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.accumulator & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
-}
-
-// X = A, transfer Accumulator to X, TAX
-void s502_transfer_accumulator_to_x(void)
-{
-    cpu.x = cpu.accumulator;
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.x == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.x & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
-}
-
-// Y = A, transfer Accumulator to Y, TAY
-void s502_transfer_accumulator_to_y(void)
-{
-    cpu.y = cpu.accumulator;
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.y == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.y & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
-}
-
-void s502_add_with_carry(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 raw = data + cpu.accumulator + (cpu.status_register & C_BIT_FLAG);
-    u8 result = (u8) raw;
-
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG | V_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
-    if (raw > MAX_U8) s502_set_psr_flags(C_BIT_FLAG);
-    if (~(cpu.accumulator ^ data) & (cpu.accumulator ^ result) & 0x80) {
-        s502_set_psr_flags(V_BIT_FLAG);
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG | V_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
+    if (raw > UINT8_MAX) s502_set_psr_flags(cpu, C_BIT_FLAG);
+    if (~(cpu->racc ^ data) & (cpu->racc ^ result) & 0x80) {
+        s502_set_psr_flags(cpu, V_BIT_FLAG);
     }
-    cpu.accumulator = result;
+    cpu->racc = result;
 }
 
-void s502_sub_with_carry(Instruction instruction)
+void s502_sub_with_carry(CPU *cpu, Instruction instruction)
 {
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 raw = cpu.accumulator + (~data) + (cpu.status_register & C_BIT_FLAG);
-    u8 result = (u8) raw;
+    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint16_t raw = cpu->racc + (~data) + (cpu->psr & C_BIT_FLAG);
+    uint8_t result = (uint8_t) raw;
 
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
-    if (raw > MAX_U8) s502_set_psr_flags(C_BIT_FLAG);
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
+    if (raw > UINT8_MAX) s502_set_psr_flags(cpu, C_BIT_FLAG);
 
     // NOTE: N_BIT_FLAG = 0x80
-    u8 sign_a = cpu.accumulator & N_BIT_FLAG;
-    u8 sign_data_inverted = (~data) & N_BIT_FLAG;
-    u8 sign_result = result & N_BIT_FLAG;
+    uint8_t sign_a = cpu->racc & N_BIT_FLAG;
+    uint8_t sign_data_inverted = (~data) & N_BIT_FLAG;
+    uint8_t sign_result = result & N_BIT_FLAG;
 
     if ((sign_a == sign_data_inverted) & (sign_a != sign_result)) {
-        s502_set_psr_flags(V_BIT_FLAG);
+        s502_set_psr_flags(cpu, V_BIT_FLAG);
     } else {
-        s502_clear_psr_flags(V_BIT_FLAG);
+        s502_clear_psr_flags(cpu, V_BIT_FLAG);
     }
-    cpu.accumulator = result;
+    cpu->racc = result;
 }
 
-void s502_compare_accumulator_with_data(Instruction instruction)
+void s502_compare_reg_with_data(CPU *cpu, Instruction instruction, uint8_t reg_type)
 {
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 result = cpu.accumulator - data;
+    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint16_t result = reg_type - data;
 
-    s502_clear_psr_flags(Z_BIT_FLAG | C_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.accumulator == data) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.accumulator >= data) s502_set_psr_flags(C_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | C_BIT_FLAG | N_BIT_FLAG);
+    if (reg_type == data) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (reg_type >= data) s502_set_psr_flags(cpu, C_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void s502_compare_x_register_with_data(Instruction instruction)
+void s502_transfer_stack_to_reg(CPU *cpu, uint8_t *data)
 {
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 result = cpu.x - data;
-    s502_clear_psr_flags(Z_BIT_FLAG | C_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.x == data) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.x >= data) s502_set_psr_flags(C_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+    *data = s502_cpu_read(cpu, bytes_to_uint16_t(STACK_PAGE, cpu->sp));
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (*data == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (*data & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void s502_compare_y_register_with_data(Instruction instruction)
+// A | SR
+void s502_push_reg_to_stack(CPU *cpu, uint8_t reg_type)
 {
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u16 result = cpu.y - data;
-
-    s502_clear_psr_flags(Z_BIT_FLAG | C_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.y == data) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.y >= data) s502_set_psr_flags(C_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+    s502_push_stack(cpu, reg_type);
 }
 
-void s502_transfer_stack_to_x(void)
+// A or SR
+void s502_pull_reg_from_stack(CPU *cpu, uint8_t *reg_type)
 {
-    cpu.x = cpu.memory[STACK_PAGE][cpu.stack];
-
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (cpu.x == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (cpu.x & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
+    *reg_type = s502_pull_stack(cpu);
 }
 
-void s502_transfer_x_to_stack(void)
+void s502_logical_and(CPU *cpu, Instruction instruction)
 {
-    s502_push_stack(cpu.x);
+    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t result = cpu->racc & data;
+
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_clear_psr_flags(cpu, N_BIT_FLAG);
+    cpu->racc = result;
 }
 
-void s502_transfer_accumulator_to_stack(void)
+void s502_logical_xor(CPU *cpu, Instruction instruction)
 {
-    s502_push_stack(cpu.accumulator);
+    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t result = cpu->racc ^ data;
+
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_clear_psr_flags(cpu, N_BIT_FLAG);
+    cpu->racc = result;
 }
 
-void s502_transfer_status_register_to_stack(void)
+void s502_logical_or(CPU *cpu, Instruction instruction)
 {
-    s502_push_stack(cpu.status_register);
+    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t result = cpu->racc | data;
+
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) s502_clear_psr_flags(cpu, N_BIT_FLAG);
+    cpu->racc = result;
 }
 
-void s502_pull_accumulator_from_stack(void)
+void s502_bit_test(CPU *cpu, Instruction instruction)
 {
-    cpu.accumulator = s502_pull_stack();
+    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t result = cpu->racc & data;
+
+    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | V_BIT_FLAG);
+    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (data & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
+    if (data & V_BIT_FLAG) s502_set_psr_flags(cpu, V_BIT_FLAG);
 }
 
-void s502_pull_status_register_from_stack(void)
+void s502_branch_flag_clear(CPU *cpu, Instruction instruction, Status_Flags flag)
 {
-    cpu.status_register = s502_pull_stack();
-}
-
-void s502_logical_and(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u8 result = cpu.accumulator & data;
-
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_clear_psr_flags(N_BIT_FLAG);
-    cpu.accumulator = result;
-}
-
-void s502_logical_xor(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u8 result = cpu.accumulator ^ data;
-
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_clear_psr_flags(N_BIT_FLAG);
-    cpu.accumulator = result;
-}
-
-void s502_logical_or(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u8 result = cpu.accumulator | data;
-
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_clear_psr_flags(N_BIT_FLAG);
-    cpu.accumulator = result;
-}
-
-void s502_bit_test(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    u8 result = cpu.accumulator & data;
-
-    s502_clear_psr_flags(Z_BIT_FLAG | N_BIT_FLAG | V_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(Z_BIT_FLAG);
-    if (data & N_BIT_FLAG) s502_set_psr_flags(N_BIT_FLAG);
-    if (data & V_BIT_FLAG) s502_set_psr_flags(V_BIT_FLAG);
-}
-
-void s502_branch_carry_clear(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (cpu.status_register & C_BIT_FLAG) {
-        cpu.program_counter += (data);
+    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    if (cpu->psr & flag) {
+        cpu->pc += (data);
     }
 }
 
-void s502_branch_carry_set(Instruction instruction)
+void s502_branch_flag_set(CPU *cpu, Instruction instruction, Status_Flags flag)
 {
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (!(cpu.status_register & C_BIT_FLAG)) {
-        cpu.program_counter += (data);
+    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    if (!(cpu->psr & flag)) {
+        cpu->pc += (data);
     }
 }
 
-void s502_branch_zero_set(Instruction instruction)
+void s502_break(CPU *cpu)
 {
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (cpu.status_register &  Z_BIT_FLAG) {
-        cpu.program_counter += (data);
-    }
-}
-
-void s502_branch_zero_clear(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (!(cpu.status_register & Z_BIT_FLAG)) {
-        cpu.program_counter += (data);
-    }
-}
-
-void s502_branch_negative_set(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (cpu.status_register & N_BIT_FLAG) {
-        cpu.program_counter += (data);
-    }
-}
-
-void s502_branch_negative_clear(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (!(cpu.status_register & N_BIT_FLAG)) {
-        cpu.program_counter += (data);
-    }
-}
-
-void s502_branch_overflow_set(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (cpu.status_register & V_BIT_FLAG) {
-        cpu.program_counter += (data);
-    }
-}
-
-void s502_branch_overflow_clear(Instruction instruction)
-{
-    u8 data = s502_fetch_operand_data(instruction.mode, instruction.operand);
-    if (!(cpu.status_register & V_BIT_FLAG)) {
-        cpu.program_counter += (data);
-    }
-}
-
-void s502_break(void)
-{
-    s502_set_psr_flags(B_BIT_FLAG);
-    u8 pc_high_byte, pc_low_byte;
-    u16_to_bytes(cpu.program_counter, &pc_high_byte, &pc_low_byte); // Split the Program Counter
-    s502_push_stack(pc_high_byte); // Push higher-byte first
-    s502_push_stack(pc_low_byte); // Push lower-byte second
-    s502_push_stack(cpu.status_register); // Push the Process Status register
+    s502_set_psr_flags(cpu, B_BIT_FLAG);
+    uint8_t pc_high_byte, pc_low_byte;
+    uint16_t_to_bytes(cpu->pc, &pc_high_byte, &pc_low_byte); // Split the Program Counter
+    s502_push_stack(cpu, pc_high_byte); // Push higher-byte first
+    s502_push_stack(cpu, pc_low_byte); // Push lower-byte second
+    s502_push_stack(cpu, cpu->psr); // Push the Process Status reg
     // TODO: Make the Interrupt vector a const variable
-    cpu.program_counter = cpu.memory[MAX_PAGES][MAX_OFFSET]; // load the Interrupt Vector into the Program Counter
+    cpu->pc = s502_cpu_read(cpu, bytes_to_uint16_t(MAX_PAGES, MAX_OFFSET)); // load the Interrupt Vector into the Program Counter
     printf("Program Interrupted\n");
 }
 
-bool s502_decode(Instruction instruction)
+bool s502_decode(CPU *cpu, Instruction instruction)
 {
     switch (instruction.opcode) {
-    case LDA: s502_load_accumulator(instruction);              return true;
-    case LDY: s502_load_y_register(instruction);               return true;
-    case LDX: s502_load_x_register(instruction);               return true;
+    case LDA: s502_load_reg(cpu, instruction, &cpu->racc);             return true;
+    case LDY: s502_load_reg(cpu, instruction, &cpu->regy);             return true;
+    case LDX: s502_load_reg(cpu, instruction, &cpu->regx);             return true;
 
-    case STA: s502_store_accumulator(instruction);             return true;
-    case STY: s502_store_y_register(instruction);              return true;
-    case STX: s502_store_x_register(instruction);              return true;
+    case STA: s502_store_reg(cpu, instruction, cpu->racc);             return true;
+    case STY: s502_store_reg(cpu, instruction, cpu->regy);             return true;
+    case STX: s502_store_reg(cpu, instruction, cpu->regx);             return true;
 
-    case TXA: s502_transfer_x_to_accumulator();                return true;
-    case TYA: s502_transfer_y_to_accumulator();                return true;
-    case TAX: s502_transfer_accumulator_to_x();                return true;
-    case TAY: s502_transfer_accumulator_to_y();                return true;
+    case TXA: s502_transfer_reg_to_accumulator(cpu, cpu->regx);        return true;
+    case TYA: s502_transfer_reg_to_accumulator(cpu, cpu->regy);        return true;
+    case TAX: s502_transfer_accumulator_to_reg(cpu, &cpu->regx);       return true;
+    case TAY: s502_transfer_accumulator_to_reg(cpu, &cpu->regy);       return true;
 
-    case CLC: s502_clear_psr_flags(C_BIT_FLAG);                return true;
-    case CLD: s502_clear_psr_flags(D_BIT_FLAG);                return true;
-    case CLI: s502_clear_psr_flags(I_BIT_FLAG);                return true;
-    case CLV: s502_clear_psr_flags(V_BIT_FLAG);                return true;
-    case SEC: s502_set_psr_flags(C_BIT_FLAG);                  return true;
-    case SED: s502_set_psr_flags(D_BIT_FLAG);                  return true;
-    case SEI: s502_set_psr_flags(I_BIT_FLAG);                  return true;
+    case CLC: s502_clear_psr_flags(cpu, C_BIT_FLAG);                        return true;
+    case CLD: s502_clear_psr_flags(cpu, D_BIT_FLAG);                        return true;
+    case CLI: s502_clear_psr_flags(cpu, I_BIT_FLAG);                        return true;
+    case CLV: s502_clear_psr_flags(cpu, V_BIT_FLAG);                        return true;
+    case SEC: s502_set_psr_flags(cpu, C_BIT_FLAG);                          return true;
+    case SED: s502_set_psr_flags(cpu, D_BIT_FLAG);                          return true;
+    case SEI: s502_set_psr_flags(cpu, I_BIT_FLAG);                          return true;
 
-    case ADC: s502_add_with_carry(instruction);                return true;
-    case SBC: s502_sub_with_carry(instruction);                return true;
-    case CMP: s502_compare_accumulator_with_data(instruction); return true;
-    case CPX: s502_compare_x_register_with_data(instruction);  return true;
-    case CPY: s502_compare_y_register_with_data(instruction);  return true;
+    case ADC: s502_add_with_carry(cpu, instruction);                        return true;
+    case SBC: s502_sub_with_carry(cpu, instruction);                        return true;
+    case CMP: s502_compare_reg_with_data(cpu, instruction, cpu->racc); return true;
+    case CPX: s502_compare_reg_with_data(cpu, instruction, cpu->regx); return true;
+    case CPY: s502_compare_reg_with_data(cpu, instruction, cpu->regy); return true;
 
-    case TSX: s502_transfer_stack_to_x();                      return true;
-    case TXS: s502_transfer_x_to_stack();                      return true;
-    case PHA: s502_transfer_accumulator_to_stack();            return true;
-    case PHP: s502_transfer_status_register_to_stack();        return true;
-    case PLA: s502_pull_accumulator_from_stack();              return true;
-    case PLP: s502_pull_status_register_from_stack();          return true;
+    case TSX: s502_transfer_stack_to_reg(cpu, &cpu->regx);             return true;
+    case TXS: s502_push_reg_to_stack(cpu, cpu->regx);                  return true;
+    case PHA: s502_push_reg_to_stack(cpu, cpu->racc);                  return true;
+    case PHP: s502_push_reg_to_stack(cpu, cpu->psr);                   return true;
+    case PLA: s502_pull_reg_from_stack(cpu, &cpu->racc);               return true;
+    case PLP: s502_pull_reg_from_stack(cpu, &cpu->psr);                return true;
 
-    case ORA: s502_logical_or(instruction);                    return true;
-    case AND: s502_logical_and(instruction);                   return true;
-    case EOR: s502_logical_xor(instruction);                   return true;
-    case BIT: s502_bit_test(instruction);                      return true;
+    case ORA: s502_logical_or(cpu, instruction);                            return true;
+    case AND: s502_logical_and(cpu, instruction);                           return true;
+    case EOR: s502_logical_xor(cpu, instruction);                           return true;
+    case BIT: s502_bit_test(cpu, instruction);                              return true;
 
-    case BNE: s502_branch_zero_clear(instruction);             return true;
-    case BCC: s502_branch_carry_clear(instruction);            return true;
-    case BCS: s502_branch_carry_set(instruction);              return true;
-    case BEQ: s502_branch_zero_set(instruction);               return true;
-    case BMI: s502_branch_negative_set(instruction);           return true;
-    case BPL: s502_branch_negative_clear(instruction);         return true;
-    case BVC: s502_branch_overflow_clear(instruction);         return true;
-    case BVS: s502_branch_overflow_set(instruction);           return true;
+    case BNE: s502_branch_flag_clear(cpu, instruction, Z_BIT_FLAG);         return true;
+    case BCC: s502_branch_flag_clear(cpu, instruction, C_BIT_FLAG);         return true;
+    case BPL: s502_branch_flag_clear(cpu, instruction, N_BIT_FLAG);         return true;
+    case BVC: s502_branch_flag_clear(cpu, instruction, V_BIT_FLAG);         return true;
+    case BEQ: s502_branch_flag_set(cpu, instruction, Z_BIT_FLAG);           return true;
+    case BCS: s502_branch_flag_set(cpu, instruction, C_BIT_FLAG);           return true;
+    case BMI: s502_branch_flag_set(cpu, instruction, N_BIT_FLAG);           return true;
+    case BVS: s502_branch_flag_set(cpu, instruction, V_BIT_FLAG);           return true;
 
-    case BRK: s502_break();                                    return true;
+    case BRK: s502_break(cpu);                                              return true;
 
     case NOP: UNIMPLEMENTED("NOP");
     case RTI: UNIMPLEMENTED("RTI");
@@ -887,10 +769,10 @@ bool s502_decode(Instruction instruction)
     case LSR: UNIMPLEMENTED("LSR");
     case ROL: UNIMPLEMENTED("ROL");
     case ROR: UNIMPLEMENTED("ROR");
-    case ERROR_FETCH_DATA: UNREACHABLE("ERROR_FETCH_DATA");
-    case ERROR_FETCH_LOCATION: UNREACHABLE("ERROR_FETCH_LOCATION");
+    case ERROR_FETCH_DATA:
+    case ERROR_FETCH_LOCATION:
     default:
+        UNREACHABLE("decode");
         return false;
     }
-    UNREACHABLE("decode");
 }
