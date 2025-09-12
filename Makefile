@@ -1,9 +1,9 @@
 CC=clang
-CFLAGS= -ggdb3 -gdwarf-4 -O3 -Wall -Werror -Wextra -Wshadow -Wswitch-enum -march=native -std=c99 -pedantic
+CFLAGS= -ggdb3 -gdwarf-4 -O3 -Wall -Werror -Wextra -Wswitch-enum -march=native -std=c99 -pedantic
 
 .PHONY: all clean build
 
-all: build/s502 build/assembler
+all: build/s502 # build/assembler
 
 build:
 	mkdir -p build/

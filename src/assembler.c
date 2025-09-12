@@ -15,7 +15,8 @@
 
 #define MAX_BUF_LEN  128
 #define MAX_LINE_LEN 256
-char *read_file(const char *file_path, i32 *size)
+
+char *read_file(const char *file_path, u32 *size)
 {
     FILE *fp = fopen(file_path, "rb");
     if (fp == NULL) {
@@ -61,7 +62,7 @@ typedef struct {
 } Symbol;
 
 typedef struct {
-    Symbol symbol;
+    String_View sv;
     Token_Type type;
 } Token;
 
@@ -81,15 +82,25 @@ const char *token_type_as_cstr(Token_Type type)
 }
 
 typedef ARRAY(String_View) Lines;
-typedef ARRAY(Token)       Symbol_Table;
+typedef ARRAY(Token)       Tokens;
+typedef ARRAY(Symbol)      Symbol_Table;
+typedef ARRAY(u8)          Byte_Code;
+
+typedef struct Generation {
+    u16 start_address;
+    Byte_Code byte_code;
+} Generation;
 
 typedef struct {
     const char *file_path;
     const char *content;
-    i32 content_len;
-    i32 row;
-    Symbol_Table table;
+    u32 content_len;
+    u32 row;
     Lines  lines;
+    Tokens tokens;
+    Symbol_Table table;
+    u16 program_counter;
+    Byte_Code byte_code;
 } Lexer;
 
 // Duplicate with Null Character
@@ -108,29 +119,19 @@ char *string_duplicate(char *src)
     return dest;
 }
 
-bool line_add(String_View *sv, Lines *lines)
-{
-    if (!lines) return false;
-    if (!sv) return false;
-    if (sv->count == 0) return false;
-
-    String_View string = sv_trim(*sv);
-    array_append(lines, string);
-    return true;
-}
-
 Lexer lexer_init(const char *file_path)
 {
     Lexer lexer = {0};
     lexer.file_path = file_path;
-    lexer.content = read_file(lexer.file_path, &lexer.content_len);
+    lexer.content = read_file(lexer.file_path, (u32*)&lexer.content_len);
     lexer.row = 0;
     array_new(&lexer.table);
+    array_new(&lexer.tokens);
     array_new(&lexer.lines);
     return lexer;
 }
 
-bool is_opcode(const String_View sv)
+bool is_opcode(const String_View *sv)
 {
     const String_View opcodes_svs[] = {
         SV("BRK"),SV("NOP"),SV("RTI"),SV("RTS"),SV("JMP"),SV("JSR"),SV("ADC"),SV("SBC"),SV("CMP"),SV("CPX"),
@@ -143,7 +144,7 @@ bool is_opcode(const String_View sv)
 
     u32 count = ERROR_FETCH_DATA - 2;
     for (u32 i = 0; i < count; ++i) {
-        if (sv_eq(sv, opcodes_svs[i])) {
+        if (sv_eq(*sv, opcodes_svs[i])) {
             return true;
         }
     }
@@ -151,55 +152,50 @@ bool is_opcode(const String_View sv)
     return false;
 }
 
-bool is_directive(const String_View sv)
+bool is_directive(const String_View *sv)
 {
-    return sv_starts_with(sv, SV(".")) && sv.count > 1;
+    return sv_starts_with(*sv, SV(".")) && sv->count > 1;
 }
 
-bool is_address(const String_View sv)
+bool is_address(const String_View *sv)
 {
-    return sv_starts_with(sv, SV("$")) && sv.count > 1;
+    return sv_starts_with(*sv, SV("$")) && sv->count > 1;
 }
 
-bool is_immediate(const String_View sv)
+bool is_immediate(const String_View *sv)
 {
-    return sv_starts_with(sv, SV("#")) && sv.count > 1;
+    return sv_starts_with(*sv, SV("#")) && sv->count > 1;
 }
 
-bool is_label(const String_View sv)
+bool is_label(const String_View *sv)
 {
-    return sv_ends_with(sv, SV(":")) && sv.count > 1;
+    return sv_ends_with(*sv, SV(":")) && sv->count > 1;
 }
 
-Symbol symbol(String_View sv, u16 address)
+bool append_token(String_View sv, Tokens *tokens)
 {
-    return (Symbol){sv, address};
-}
-
-bool append_symbol(String_View sv, Symbol_Table *table)
-{
-    if (!table) return false;
+    if (!tokens || sv.count == 0) return false;
 
     Token token      = {0};
-    token.symbol = symbol(sv, 0);
-    if (is_label(sv)) {
+    token.sv = sv_trim(sv);
+
+    if (is_label(&sv)) {
         token.type   = TOKEN_LABEL;
-    } else if (is_directive(sv)) {
+    } else if (is_directive(&sv)) {
         token.type   = TOKEN_DIRECTIVE;
-    } else if (is_opcode(sv)) {
+    } else if (is_opcode(&sv)) {
         token.type   = TOKEN_OPCODE;
-    } else if (is_address(sv)) {
+    } else if (is_address(&sv)) {
         token.type   = TOKEN_ADDRESS;
-    } else if (is_immediate(sv)) {
+    } else if (is_immediate(&sv)) {
         token.type   = TOKEN_IMMEDIATE;
     } else {
         token.type   = TOKEN_UNKNOWN;
     }
 
-    array_append(table, token);
+    array_append(tokens, token);
     return true;
 }
-
 
 bool lexer_scan_lines(Lexer *lexer)
 {
@@ -223,6 +219,38 @@ bool lexer_scan_lines(Lexer *lexer)
     return true;
 }
 
+bool tokenize_line(String_View line, Tokens *tokens)
+{
+    if (line.count == 0) return false;
+    if (!tokens) return false;
+
+    u32 n = 0;
+    char buf[MAX_BUF_LEN] = {0};
+    u32 cursor = 0;
+
+    while (n < line.count) {
+        char c = line.data[n++];
+        if (c == ' ') {
+            if (cursor > 0) {
+                buf[cursor] = '\0';
+                printf("BUF: %s|\n", buf);
+                cursor = 0;
+                if (append_token(sv_from_cstr(string_duplicate(buf)), tokens)) {};
+            }
+        } else {
+            buf[cursor] = c;
+            cursor++;
+        }
+    }
+
+    // Remaining
+    buf[cursor] = '\0';
+    printf("BUF: %s|\n", buf);
+    cursor = 0;
+    if (append_token(sv_from_cstr(string_duplicate(buf)), tokens)) {};
+    return true;
+}
+
 bool lexer_scan_line_items(Lexer *lexer)
 {
     if (!lexer->content || lexer->content_len == 0) {
@@ -232,31 +260,166 @@ bool lexer_scan_line_items(Lexer *lexer)
 
     for (u32 i = 0; i < lexer->lines.count; ++i) {
         String_View line = lexer->lines.items[i];
-        String_View remain = line;
+        if (tokenize_line(line, &lexer->tokens)) continue;
+    }
+    return true;
+}
 
-        while (remain.count > 0) {
-            remain = sv_trim_left(remain);
-            if (remain.count == 0) break;
+// Convert hexadecimal string to u16 (handles both $ prefix and without)
+u16 sv_hex_to_u16(String_View sv)
+{
+    u16 result = 0;
+    u32 start = 0;
 
-            u32 token_len = 0;
-            while (token_len < remain.count &&
-                   !isspace(remain.data[token_len]) &&
-                   remain.data[token_len] != ','
-                ) { token_len++; }
+    // Skip $ prefix if present
+    if (sv.count > 0 && sv.data[0] == '$') {
+        start = 1;
+    }
 
-            if (token_len == 0) {
-                remain = sv_chop_left(&remain, 1);
-                continue;
+    for (u32 i = start; i < sv.count; ++i) {
+        char c = sv.data[i];
+        u8 value;
+
+        if (c >= '0' && c <= '9') {
+            value = c - '0';
+        } else if (c >= 'a' && c <= 'f') {
+            value = 10 + (c - 'a');
+        } else if (c >= 'A' && c <= 'F') {
+            value = 10 + (c - 'A');
+        } else {
+            break; // Invalid character
+        }
+        result = result * 16 + value;
+    }
+
+    return result;
+}
+
+// Convert immediate value (handles # prefix)
+u16 sv_immediate_to_u16(String_View sv)
+{
+    u32 start = 0;
+
+    // Skip # prefix
+    if (sv.count > 0 && sv.data[0] == '#') {
+        start = 1;
+    }
+
+    // Check if it's hexadecimal ($ prefix)
+    if (start < sv.count && sv.data[start] == '$') {
+        return sv_hex_to_u16(sv_from_parts(sv.data + start, sv.count - start));
+    }
+    // Otherwise assume decimal
+    return sv_to_u16(sv_from_parts(sv.data + start, sv.count - start));
+}
+
+bool expect_token(Token *token, Token_Type type)
+{
+    if (token->type != type) {
+        fprintf(stderr, "Expected: `%s`, Found: `%s`\n",
+                token_type_as_cstr(TOKEN_ADDRESS),
+                token_type_as_cstr(token->type)
+            );
+        return false;
+    }
+    return true;
+}
+
+Symbol symbol(String_View sv, u16 address)
+{
+    return (Symbol){sv, address};
+}
+
+bool append_symbol(Symbol symbol, Symbol_Table *table)
+{
+    if (symbol.sv.count == 0 || !table) return false;
+    array_append(table, symbol);
+    return true;
+}
+
+bool calculate_address(Lexer *lexer)
+{
+    if (!lexer) return false;
+    // u16 start_address = 0;
+    for (u32 i = 0; i < lexer->tokens.count; ++i) {
+        Token *token = &lexer->tokens.items[i];
+        switch (token->type) {
+        case TOKEN_DIRECTIVE: {
+            if (i + 1 < lexer->tokens.count) {
+                Token *next = &lexer->tokens.items[i + 1];
+                if (expect_token(next, TOKEN_ADDRESS)) {
+                    lexer->program_counter = sv_hex_to_u16(next->sv);
+                    ++i;
+                } else {
+                    return false;
+                }
+            } else {
+                fprintf(stderr, "Missing Address For Directive\n");
+                return false;
             }
+        } break;
 
-            String_View token_sv = sv_from_parts(remain.data, token_len);
-            printf("Token Debug: "SV_Fmt"\n", SV_Arg(token_sv));
-            append_symbol(token_sv, &lexer->table);
+        case TOKEN_LABEL: {
+            if (sv_eq(token->sv, SV("START:"))) {
+                Symbol symb = symbol(
+                    sv_from_parts(token->sv.data, token->sv.count - 1),
+                    lexer->program_counter);
+                append_symbol(symb, &lexer->table);
+            }
+        } break;
 
-            sv_chop_left(&remain, token_len);
+        case TOKEN_OPCODE: {
+            u8 instruction_size = 1;
+            if (i + 1 < lexer->tokens.count) {
+                Token *next = &lexer->tokens.items[i + 1];
+                if (next->type == TOKEN_ADDRESS) {
+                    ++i;
+                    if (sv_hex_to_u16(next->sv) > 0xFF) {
+                        instruction_size = 3;
+                    } else {
+                        instruction_size = 2;
+                    }
+                }
+                if (next->type ==  TOKEN_IMMEDIATE) {
+                    ++i;
+                    instruction_size = 2;
+                }
+            }
+            Symbol symb = symbol(token->sv, lexer->program_counter);
+            append_symbol(symb, &lexer->table);
+            lexer->program_counter+=instruction_size;
+        } break;
+
+        case TOKEN_ADDRESS: break;
+        case TOKEN_IMMEDIATE: break;
+        case TOKEN_COMMENT:
+        case TOKEN_UNKNOWN:
+        default:
+            break;
         }
     }
     return true;
+}
+
+Instruction encode(char *opcode, u16 address)
+{
+
+}
+
+Generation generation(Lexer *lexer)
+{
+    Generation generation = {0};
+    array_new(&generation.byte_code);
+    generation.start_address = lexer->table.items[0].address;
+
+    for (u32 i = 0; i < (u32)lexer->program_counter; ++i) {
+        for (u32 i = 0; i < ARRAY_LEN(opcode_matrix); ++i) {
+            const char *opcode_cstr = s502_opcode_as_cstr(opcode_matrix[i].opcode);
+            if (sv_eq(opcode, sv_from_cstr(opcode_cstr))) {
+
+            }
+        }
+    }
 }
 
 void usage(char **argv)
@@ -280,10 +443,14 @@ int main(int argc, char **argv)
     printf("Content_len : %d\n", lexer.content_len);
     printf("Row         : %d\n", lexer.row);
 
+    if (!calculate_address(&lexer)) return 1;
     for (u32 i = 0; i < lexer.table.count; ++i) {
-        printf("Token: "SV_Fmt", Type: %s\n",
-               SV_Arg(lexer.table.items[i].symbol.sv),
-               token_type_as_cstr(lexer.table.items[i].type));
+        printf("Symbol: "SV_Fmt", Address: %x\n",
+               SV_Arg(lexer.table.items[i].sv),
+               lexer.table.items[i].address
+            );
+        printf("_____________________\n\n");
     }
+    printf("Program Counter: 0x%x\n", lexer.program_counter);
     return 0;
 }

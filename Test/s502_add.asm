@@ -1,9 +1,9 @@
-.ORG $8080
+.org $8080
 
-START:
-    CLC
-    LDA   #$00
-    ADC   $0360
-    ADC   $0361
-    STA   $0362
-    BRK
+start:
+    clc
+    lda   #$00
+    adc   $0360
+    adc   $0361
+    sta   $0362
+    brk
