@@ -58,7 +58,7 @@ Location mos_uint16_t_to_loc(uint16_t sixteen_bit)
     return loc;
 }
 
-uint16_t loc_to_uint16_t(Location loc)
+uint16_t mos_loc_to_uint16_t(Location loc)
 {
     return mos_bytes_to_uint16_t(loc.page, loc.offset);
 }
@@ -260,7 +260,7 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             // if the operand doesn't contain any page, assumed that it is page zero
             Location location = operand.data.address.loc;
             MOS_ASSERT(location.page == 0x00, "Invalid Page Zero Address");
-            return mos_cpu_read(cpu, loc_to_uint16_t(location));
+            return mos_cpu_read(cpu, mos_loc_to_uint16_t(location));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -276,7 +276,7 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             Location location = operand.data.address.loc;
             MOS_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
             Location new_loc = { .offset = location.offset + cpu->regx, .page = location.page};
-            return mos_cpu_read(cpu, loc_to_uint16_t(new_loc));
+            return mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -290,7 +290,7 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
             Location location = mos_uint16_t_to_loc(absolute);
-            return mos_cpu_read(cpu, loc_to_uint16_t(location));
+            return mos_cpu_read(cpu, mos_loc_to_uint16_t(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -305,7 +305,7 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             Absolute absolute = operand.data.address.absolute;
             Absolute index = absolute + cpu->regx;
             Location location = mos_uint16_t_to_loc(index);
-            return mos_cpu_read(cpu, loc_to_uint16_t(location));
+            return mos_cpu_read(cpu, mos_loc_to_uint16_t(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -320,7 +320,7 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             Absolute absolute = operand.data.address.absolute;
             Absolute index = absolute + cpu->regy;
             Location location = mos_uint16_t_to_loc(index);
-            return mos_cpu_read(cpu, loc_to_uint16_t(location));
+            return mos_cpu_read(cpu, mos_loc_to_uint16_t(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
@@ -340,10 +340,10 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             Location new_loc   = {.offset = location.offset + cpu->regx, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
-                .offset = mos_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
-                .page =   mos_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
+                .offset = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
+                .page =   mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
             };
-            return mos_cpu_read(cpu, loc_to_uint16_t(final));
+            return mos_cpu_read(cpu, mos_loc_to_uint16_t(final));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
@@ -359,8 +359,8 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             MOS_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
-            uint8_t offset = mos_cpu_read(cpu, loc_to_uint16_t(new_loc));   // fetch low-byte from new_loc
-            uint8_t page =   mos_cpu_read(cpu, loc_to_uint16_t(new_loc_i)); // fetch high-byte from new_loc + 1
+            uint8_t offset = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc));   // fetch low-byte from new_loc
+            uint8_t page =   mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc_i)); // fetch high-byte from new_loc + 1
             uint16_t base_addr = mos_bytes_to_uint16_t(page, offset);
             uint16_t final = base_addr + cpu->regy;
             return mos_cpu_read(cpu, final);
@@ -478,8 +478,8 @@ Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand ope
             Location new_loc   = {.offset = location.offset + cpu->regx, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             return (Location) {
-                .offset = mos_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
-                .page   = mos_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
+                .offset = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
+                .page   = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
             };
         }
         case OPERAND_ABSOLUTE:
@@ -497,8 +497,8 @@ Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand ope
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
-                .offset = mos_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
-                .page =   mos_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
+                .offset = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
+                .page =   mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
             };
             final.offset += cpu->regy; // final Address that contains the data
             return final;
@@ -533,7 +533,7 @@ void mos_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type)
 void mos_store_reg(CPU *cpu, Instruction instruction, uint8_t data)
 {
     Location loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
-    mos_cpu_write(cpu, loc_to_uint16_t(loc), data);  // Write Accumulator to memory
+    mos_cpu_write(cpu, mos_loc_to_uint16_t(loc), data);  // Write Accumulator to memory
 }
 
 // A = X | Y, transfer X | Y to A, TXA | TYA
