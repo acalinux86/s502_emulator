@@ -3,12 +3,12 @@ CFLAGS= -ggdb3 -gdwarf-4 -O3 -Wall -Werror -Wextra -Wswitch-enum -march=native -
 
 .PHONY: all clean build
 
-all: build/s502 # build/assembler
+all: build/mos # build/assembler
 
 build:
 	mkdir -p build/
 
-build/s502: src/s502.c src/main.c | build
+build/mos: src/mos.c src/main.c | build
 	$(CC) $(CFLAGS) -o $@ $^
 
 build/assembler: src/assembler.c | build
