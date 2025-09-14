@@ -5,9 +5,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "./s502.h"
+#include "./mos.h"
 
-#define S502_ASSERT(condition, message)                     \
+#define MOS_ASSERT(condition, message)                     \
     do {                                                    \
         if (!(condition)) {                                 \
             fprintf(stderr, "CPU FAULT: %s\n", message);    \
@@ -35,22 +35,22 @@ Opcode_Info opcode_matrix[UINT8_MAX + 1] = {
 };
 
 // Helper Functions
-void uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte)
+void mos_uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte)
 {
     *high_byte = sixteen_bit >> 8; // higher byte
     *low_byte  = sixteen_bit & 0xFF; // low-byte
 }
 
 // a must be the higher-byte and b the lower-byte
-uint16_t bytes_to_uint16_t(uint8_t a, uint8_t b)
+uint16_t mos_bytes_to_uint16_t(uint8_t a, uint8_t b)
 {
     return (a << 8) | b;
 }
 
-Location uint16_t_to_loc(uint16_t sixteen_bit)
+Location mos_uint16_t_to_loc(uint16_t sixteen_bit)
 {
     uint8_t high_byte, low_byte;
-    uint16_t_to_bytes(sixteen_bit, &high_byte, &low_byte);
+    mos_uint16_t_to_bytes(sixteen_bit, &high_byte, &low_byte);
     Location loc = {
         .page = high_byte, // higher byte
         .offset = low_byte, // low-byte
@@ -60,11 +60,11 @@ Location uint16_t_to_loc(uint16_t sixteen_bit)
 
 uint16_t loc_to_uint16_t(Location loc)
 {
-    return bytes_to_uint16_t(loc.page, loc.offset);
+    return mos_bytes_to_uint16_t(loc.page, loc.offset);
 }
 
 // DEBUG:
-CPU s502_cpu_init(void)
+CPU mos_cpu_init(void)
 {
     CPU cpu = {0};
     cpu.regx = 0;
@@ -77,24 +77,24 @@ CPU s502_cpu_init(void)
     return cpu;
 }
 
-uint8_t s502_read_memory(void *device, Location location)
+uint8_t mos_read_memory(void *device, Location location)
 {
     uint8_t *ram = (uint8_t*)device;
-    return ram[bytes_to_uint16_t(location.page, location.offset)];
+    return ram[mos_bytes_to_uint16_t(location.page, location.offset)];
 }
 
-void s502_write_memory(void *device, Location location, uint8_t data)
+void mos_write_memory(void *device, Location location, uint8_t data)
 {
     uint8_t *ram = (uint8_t*) device;
-    ram[bytes_to_uint16_t(location.page, location.offset)] = data;
+    ram[mos_bytes_to_uint16_t(location.page, location.offset)] = data;
 }
 
-uint8_t s502_cpu_read(CPU *cpu, uint16_t addr)
+uint8_t mos_cpu_read(CPU *cpu, uint16_t addr)
 {
     for (uint8_t i = 0; i < cpu->entries.count; ++i) {
         MMap_Entry *entry = &cpu->entries.items[i];
         if (addr >= entry->start_addr && addr <= entry->end_addr) {
-            return entry->read(entry->device, uint16_t_to_loc(addr));
+            return entry->read(entry->device, mos_uint16_t_to_loc(addr));
         }
     }
 
@@ -102,13 +102,13 @@ uint8_t s502_cpu_read(CPU *cpu, uint16_t addr)
     return 0;
 }
 
-void s502_cpu_write(CPU *cpu, uint16_t addr, uint8_t data)
+void mos_cpu_write(CPU *cpu, uint16_t addr, uint8_t data)
 {
     for (uint8_t i = 0; i < cpu->entries.count; ++i) {
         MMap_Entry *entry = &cpu->entries.items[i];
         if (!entry->readonly) {
             if (addr >= entry->start_addr && addr <= entry->end_addr) {
-                entry->write(entry->device, uint16_t_to_loc(addr), data);
+                entry->write(entry->device, mos_uint16_t_to_loc(addr), data);
             }
         } else {
             fprintf(stderr, "CPU FAULT: Memory Readonly\n");
@@ -117,21 +117,21 @@ void s502_cpu_write(CPU *cpu, uint16_t addr, uint8_t data)
     }
 }
 
-void s502_push_stack(CPU *cpu, uint8_t value)
+void mos_push_stack(CPU *cpu, uint8_t value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
-    s502_cpu_write(cpu, bytes_to_uint16_t(STACK_PAGE, cpu->sp), value);
+    mos_cpu_write(cpu, mos_bytes_to_uint16_t(STACK_PAGE, cpu->sp), value);
     cpu->sp--;
 }
 
-uint8_t s502_pull_stack(CPU *cpu)
+uint8_t mos_pull_stack(CPU *cpu)
 {
     cpu->sp++;
-    return s502_cpu_read(cpu, bytes_to_uint16_t(STACK_PAGE, cpu->sp));
+    return mos_cpu_read(cpu, mos_bytes_to_uint16_t(STACK_PAGE, cpu->sp));
 }
 
 
-const char *s502_addr_mode_as_cstr(Addressing_Modes mode)
+const char *mos_addr_mode_as_cstr(Addressing_Modes mode)
 {
     switch (mode) {
     case IMPL: return "IMPLICIT";
@@ -151,7 +151,7 @@ const char *s502_addr_mode_as_cstr(Addressing_Modes mode)
     }
 }
 
-const char *s502_opcode_as_cstr(Opcode opcode)
+const char *mos_opcode_as_cstr(Opcode opcode)
 {
     switch (opcode) {
     case BRK:                  return "BRK";
@@ -216,7 +216,7 @@ const char *s502_opcode_as_cstr(Opcode opcode)
     }
 }
 
-const char *s502_operand_type_as_cstr(Operand_Type type)
+const char *mos_operand_type_as_cstr(Operand_Type type)
 {
     switch (type) {
     case OPERAND_ABSOLUTE: return "OPERAND_ABSOLUTE";
@@ -227,19 +227,19 @@ const char *s502_operand_type_as_cstr(Operand_Type type)
 }
 
 // NOTE: Set PSR FLAGS
-void s502_set_psr_flags(CPU *cpu, Status_Flags flags)
+void mos_set_psr_flags(CPU *cpu, Status_Flags flags)
 {
     cpu->psr |= flags;
 }
 
 // NOTE: Clear PSR FLAGS
-void s502_clear_psr_flags(CPU *cpu, Status_Flags flags)
+void mos_clear_psr_flags(CPU *cpu, Status_Flags flags)
 {
     cpu->psr &= (~flags);
 }
 
 // Returns data for read opcodes
-uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
+uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
 {
     switch (mode) {
     case IMME: {
@@ -250,7 +250,7 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_LOCATION:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -259,12 +259,12 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
         case OPERAND_LOCATION: {
             // if the operand doesn't contain any page, assumed that it is page zero
             Location location = operand.data.address.loc;
-            S502_ASSERT(location.page == 0x00, "Invalid Page Zero Address");
-            return s502_cpu_read(cpu, loc_to_uint16_t(location));
+            MOS_ASSERT(location.page == 0x00, "Invalid Page Zero Address");
+            return mos_cpu_read(cpu, loc_to_uint16_t(location));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -274,13 +274,13 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            S502_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
+            MOS_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
             Location new_loc = { .offset = location.offset + cpu->regx, .page = location.page};
-            return s502_cpu_read(cpu, loc_to_uint16_t(new_loc));
+            return mos_cpu_read(cpu, loc_to_uint16_t(new_loc));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -289,12 +289,12 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            Location location = uint16_t_to_loc(absolute);
-            return s502_cpu_read(cpu, loc_to_uint16_t(location));
+            Location location = mos_uint16_t_to_loc(absolute);
+            return mos_cpu_read(cpu, loc_to_uint16_t(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -304,12 +304,12 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
             Absolute index = absolute + cpu->regx;
-            Location location = uint16_t_to_loc(index);
-            return s502_cpu_read(cpu, loc_to_uint16_t(location));
+            Location location = mos_uint16_t_to_loc(index);
+            return mos_cpu_read(cpu, loc_to_uint16_t(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -319,12 +319,12 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
             Absolute index = absolute + cpu->regy;
-            Location location = uint16_t_to_loc(index);
-            return s502_cpu_read(cpu, loc_to_uint16_t(location));
+            Location location = mos_uint16_t_to_loc(index);
+            return mos_cpu_read(cpu, loc_to_uint16_t(location));
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -336,18 +336,18 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
+            MOS_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset + cpu->regx, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
-                .offset = s502_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
-                .page =   s502_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
+                .offset = mos_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
+                .page =   mos_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
             };
-            return s502_cpu_read(cpu, loc_to_uint16_t(final));
+            return mos_cpu_read(cpu, loc_to_uint16_t(final));
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -356,18 +356,18 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
+            MOS_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
-            uint8_t offset = s502_cpu_read(cpu, loc_to_uint16_t(new_loc));   // fetch low-byte from new_loc
-            uint8_t page =   s502_cpu_read(cpu, loc_to_uint16_t(new_loc_i)); // fetch high-byte from new_loc + 1
-            uint16_t base_addr = bytes_to_uint16_t(page, offset);
+            uint8_t offset = mos_cpu_read(cpu, loc_to_uint16_t(new_loc));   // fetch low-byte from new_loc
+            uint8_t page =   mos_cpu_read(cpu, loc_to_uint16_t(new_loc_i)); // fetch high-byte from new_loc + 1
+            uint16_t base_addr = mos_bytes_to_uint16_t(page, offset);
             uint16_t final = base_addr + cpu->regy;
-            return s502_cpu_read(cpu, final);
+            return mos_cpu_read(cpu, final);
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -380,7 +380,7 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
         } break;
         case OPERAND_ABSOLUTE:
         case OPERAND_LOCATION:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -389,13 +389,13 @@ uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand
     case ZPY:
     case IND:
     default:
-        ILLEGAL_ADDRESSING(mode, ERROR_FETCH_DATA);
+        MOS_ILLEGAL_ADDRESSING(mode, ERROR_FETCH_DATA);
     }
-    UNREACHABLE("s502_fetch_operand_data");
+    MOS_UNREACHABLE("mos_fetch_operand_data");
 }
 
 // Returns A Location for store opcodes
-Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand operand)
+Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand operand)
 {
     switch (mode) {
     case ZP: {
@@ -406,7 +406,7 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -416,12 +416,12 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            S502_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
+            MOS_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
             return (Location) { .offset = location.offset + cpu->regx, .page = location.page};
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -430,11 +430,11 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         switch (operand.type) {
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
-            return uint16_t_to_loc(absolute);
+            return mos_uint16_t_to_loc(absolute);
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -444,11 +444,11 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
             Absolute index = absolute + cpu->regx;
-            return uint16_t_to_loc(index);
+            return mos_uint16_t_to_loc(index);
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -458,11 +458,11 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         case OPERAND_ABSOLUTE: {
             Absolute absolute = operand.data.address.absolute;
             Absolute index = absolute + cpu->regy;
-            return uint16_t_to_loc(index);
+            return mos_uint16_t_to_loc(index);
         }
         case OPERAND_DATA:
         case OPERAND_LOCATION:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -474,17 +474,17 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
+            MOS_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset + cpu->regx, .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             return (Location) {
-                .offset = s502_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
-                .page   = s502_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
+                .offset = mos_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
+                .page   = mos_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
             };
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -493,19 +493,19 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
-            S502_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
+            MOS_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
             Location new_loc   = {.offset = location.offset    , .page = location.page};
             Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
             Location final = {
-                .offset = s502_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
-                .page =   s502_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
+                .offset = mos_cpu_read(cpu, loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
+                .page =   mos_cpu_read(cpu, loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
             };
             final.offset += cpu->regy; // final Address that contains the data
             return final;
         }
         case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
-        default: ILLEGAL_ACCESS(mode, operand.type);
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
@@ -515,71 +515,71 @@ Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand op
     case ACCU:
     case ZPY:
     case IND:
-    default: ILLEGAL_ADDRESSING(mode, ERROR_FETCH_LOCATION);
+    default: MOS_ILLEGAL_ADDRESSING(mode, ERROR_FETCH_LOCATION);
     }
-    UNREACHABLE("s502_fetch_operand_location");
+    MOS_UNREACHABLE("mos_fetch_operand_location");
 }
 
 // Reg , Z , N = M, memory into Reg
-void s502_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type)
+void mos_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type)
 {
-    *reg_type = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
-    if (*reg_type == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (*reg_type & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
+    *reg_type = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (*reg_type == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (*reg_type & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
 // M = A | X | Y, store A | X | Y into memory
-void s502_store_reg(CPU *cpu, Instruction instruction, uint8_t data)
+void mos_store_reg(CPU *cpu, Instruction instruction, uint8_t data)
 {
-    Location loc = s502_fetch_operand_location(cpu, instruction.mode, instruction.operand);
-    s502_cpu_write(cpu, loc_to_uint16_t(loc), data);  // Write Accumulator to memory
+    Location loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    mos_cpu_write(cpu, loc_to_uint16_t(loc), data);  // Write Accumulator to memory
 }
 
 // A = X | Y, transfer X | Y to A, TXA | TYA
-void s502_transfer_reg_to_accumulator(CPU *cpu, uint8_t data)
+void mos_transfer_reg_to_accumulator(CPU *cpu, uint8_t data)
 {
     cpu->racc = data;
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
-    if (cpu->racc == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (cpu->racc & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu->racc == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (cpu->racc & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
 // X | Y = A, transfer Accumulator to X | Y, TAX | TAY
-void s502_transfer_accumulator_to_reg(CPU *cpu, uint8_t *reg_type)
+void mos_transfer_accumulator_to_reg(CPU *cpu, uint8_t *reg_type)
 {
     *reg_type = cpu->racc;
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
-    if (*reg_type == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (*reg_type & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (*reg_type == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (*reg_type & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void s502_add_with_carry(CPU *cpu, Instruction instruction)
+void mos_add_with_carry(CPU *cpu, Instruction instruction)
 {
-    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint16_t raw = data + cpu->racc + (cpu->psr & C_BIT_FLAG);
     uint8_t result = (uint8_t) raw;
 
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG | V_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
-    if (raw > UINT8_MAX) s502_set_psr_flags(cpu, C_BIT_FLAG);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG | V_BIT_FLAG);
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    if (raw > UINT8_MAX) mos_set_psr_flags(cpu, C_BIT_FLAG);
     if (~(cpu->racc ^ data) & (cpu->racc ^ result) & 0x80) {
-        s502_set_psr_flags(cpu, V_BIT_FLAG);
+        mos_set_psr_flags(cpu, V_BIT_FLAG);
     }
     cpu->racc = result;
 }
 
-void s502_sub_with_carry(CPU *cpu, Instruction instruction)
+void mos_sub_with_carry(CPU *cpu, Instruction instruction)
 {
-    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint16_t raw = cpu->racc + (~data) + (cpu->psr & C_BIT_FLAG);
     uint8_t result = (uint8_t) raw;
 
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
-    if (raw > UINT8_MAX) s502_set_psr_flags(cpu, C_BIT_FLAG);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | C_BIT_FLAG);
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    if (raw > UINT8_MAX) mos_set_psr_flags(cpu, C_BIT_FLAG);
 
     // NOTE: N_BIT_FLAG = 0x80
     uint8_t sign_a = cpu->racc & N_BIT_FLAG;
@@ -587,192 +587,197 @@ void s502_sub_with_carry(CPU *cpu, Instruction instruction)
     uint8_t sign_result = result & N_BIT_FLAG;
 
     if ((sign_a == sign_data_inverted) & (sign_a != sign_result)) {
-        s502_set_psr_flags(cpu, V_BIT_FLAG);
+        mos_set_psr_flags(cpu, V_BIT_FLAG);
     } else {
-        s502_clear_psr_flags(cpu, V_BIT_FLAG);
+        mos_clear_psr_flags(cpu, V_BIT_FLAG);
     }
     cpu->racc = result;
 }
 
-void s502_compare_reg_with_data(CPU *cpu, Instruction instruction, uint8_t reg_type)
+void mos_compare_reg_with_data(CPU *cpu, Instruction instruction, uint8_t reg_type)
 {
-    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint16_t result = reg_type - data;
 
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | C_BIT_FLAG | N_BIT_FLAG);
-    if (reg_type == data) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (reg_type >= data) s502_set_psr_flags(cpu, C_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | C_BIT_FLAG | N_BIT_FLAG);
+    if (reg_type == data) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (reg_type >= data) mos_set_psr_flags(cpu, C_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void s502_transfer_stack_to_reg(CPU *cpu, uint8_t *data)
+void mos_transfer_stack_to_reg(CPU *cpu, uint8_t *data)
 {
-    *data = s502_cpu_read(cpu, bytes_to_uint16_t(STACK_PAGE, cpu->sp));
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
-    if (*data == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (*data & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
+    *data = mos_cpu_read(cpu, mos_bytes_to_uint16_t(STACK_PAGE, cpu->sp));
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (*data == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (*data & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
 // A | SR
-void s502_push_reg_to_stack(CPU *cpu, uint8_t reg_type)
+void mos_push_reg_to_stack(CPU *cpu, uint8_t reg_type)
 {
-    s502_push_stack(cpu, reg_type);
+    mos_push_stack(cpu, reg_type);
 }
 
 // A or SR
-void s502_pull_reg_from_stack(CPU *cpu, uint8_t *reg_type)
+void mos_pull_reg_from_stack(CPU *cpu, uint8_t *reg_type)
 {
-    *reg_type = s502_pull_stack(cpu);
+    *reg_type = mos_pull_stack(cpu);
 }
 
-void s502_logical_and(CPU *cpu, Instruction instruction)
+void mos_logical_and(CPU *cpu, Instruction instruction)
 {
-    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint8_t result = cpu->racc & data;
 
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_clear_psr_flags(cpu, N_BIT_FLAG);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_clear_psr_flags(cpu, N_BIT_FLAG);
     cpu->racc = result;
 }
 
-void s502_logical_xor(CPU *cpu, Instruction instruction)
+void mos_logical_xor(CPU *cpu, Instruction instruction)
 {
-    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint8_t result = cpu->racc ^ data;
 
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_clear_psr_flags(cpu, N_BIT_FLAG);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_clear_psr_flags(cpu, N_BIT_FLAG);
     cpu->racc = result;
 }
 
-void s502_logical_or(CPU *cpu, Instruction instruction)
+void mos_logical_or(CPU *cpu, Instruction instruction)
 {
-    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint8_t result = cpu->racc | data;
 
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) s502_clear_psr_flags(cpu, N_BIT_FLAG);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_clear_psr_flags(cpu, N_BIT_FLAG);
     cpu->racc = result;
 }
 
-void s502_bit_test(CPU *cpu, Instruction instruction)
+void mos_bit_test(CPU *cpu, Instruction instruction)
 {
-    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint8_t result = cpu->racc & data;
 
-    s502_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | V_BIT_FLAG);
-    if (result == 0) s502_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (data & N_BIT_FLAG) s502_set_psr_flags(cpu, N_BIT_FLAG);
-    if (data & V_BIT_FLAG) s502_set_psr_flags(cpu, V_BIT_FLAG);
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG | V_BIT_FLAG);
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (data & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    if (data & V_BIT_FLAG) mos_set_psr_flags(cpu, V_BIT_FLAG);
 }
 
-void s502_branch_flag_clear(CPU *cpu, Instruction instruction, Status_Flags flag)
+void mos_branch_flag_clear(CPU *cpu, Instruction instruction, Status_Flags flag)
 {
-    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     if (cpu->psr & flag) {
         cpu->pc += (data);
     }
 }
 
-void s502_branch_flag_set(CPU *cpu, Instruction instruction, Status_Flags flag)
+void mos_branch_flag_set(CPU *cpu, Instruction instruction, Status_Flags flag)
 {
-    uint8_t data = s502_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     if (!(cpu->psr & flag)) {
         cpu->pc += (data);
     }
 }
 
-void s502_break(CPU *cpu)
+void mos_decrement(CPU *cpu, Instruction instruction)
 {
-    s502_set_psr_flags(cpu, B_BIT_FLAG);
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    (void) data;
+}
+
+void mos_break(CPU *cpu)
+{
+    mos_set_psr_flags(cpu, B_BIT_FLAG);
     uint8_t pc_high_byte, pc_low_byte;
-    uint16_t_to_bytes(cpu->pc, &pc_high_byte, &pc_low_byte); // Split the Program Counter
-    s502_push_stack(cpu, pc_high_byte); // Push higher-byte first
-    s502_push_stack(cpu, pc_low_byte); // Push lower-byte second
-    s502_push_stack(cpu, cpu->psr); // Push the Process Status reg
+    mos_uint16_t_to_bytes(cpu->pc, &pc_high_byte, &pc_low_byte); // Split the Program Counter
+    mos_push_stack(cpu, pc_high_byte); // Push higher-byte first
+    mos_push_stack(cpu, pc_low_byte); // Push lower-byte second
+    mos_push_stack(cpu, cpu->psr); // Push the Process Status reg
     // TODO: Make the Interrupt vector a const variable
-    cpu->pc = s502_cpu_read(cpu, bytes_to_uint16_t(MAX_PAGES, MAX_OFFSET)); // load the Interrupt Vector into the Program Counter
+    cpu->pc = mos_cpu_read(cpu, mos_bytes_to_uint16_t(MAX_PAGES, MAX_OFFSET)); // load the Interrupt Vector into the Program Counter
     printf("Program Interrupted\n");
 }
 
-bool s502_decode(CPU *cpu, Instruction instruction)
+bool mos_decode(CPU *cpu, Instruction instruction)
 {
     switch (instruction.opcode) {
-    case LDA: s502_load_reg(cpu, instruction, &cpu->racc);             return true;
-    case LDY: s502_load_reg(cpu, instruction, &cpu->regy);             return true;
-    case LDX: s502_load_reg(cpu, instruction, &cpu->regx);             return true;
+    case LDA: mos_load_reg(cpu, instruction, &cpu->racc);             return true;
+    case LDY: mos_load_reg(cpu, instruction, &cpu->regy);             return true;
+    case LDX: mos_load_reg(cpu, instruction, &cpu->regx);             return true;
 
-    case STA: s502_store_reg(cpu, instruction, cpu->racc);             return true;
-    case STY: s502_store_reg(cpu, instruction, cpu->regy);             return true;
-    case STX: s502_store_reg(cpu, instruction, cpu->regx);             return true;
+    case STA: mos_store_reg(cpu, instruction, cpu->racc);             return true;
+    case STY: mos_store_reg(cpu, instruction, cpu->regy);             return true;
+    case STX: mos_store_reg(cpu, instruction, cpu->regx);             return true;
 
-    case TXA: s502_transfer_reg_to_accumulator(cpu, cpu->regx);        return true;
-    case TYA: s502_transfer_reg_to_accumulator(cpu, cpu->regy);        return true;
-    case TAX: s502_transfer_accumulator_to_reg(cpu, &cpu->regx);       return true;
-    case TAY: s502_transfer_accumulator_to_reg(cpu, &cpu->regy);       return true;
+    case TXA: mos_transfer_reg_to_accumulator(cpu, cpu->regx);        return true;
+    case TYA: mos_transfer_reg_to_accumulator(cpu, cpu->regy);        return true;
+    case TAX: mos_transfer_accumulator_to_reg(cpu, &cpu->regx);       return true;
+    case TAY: mos_transfer_accumulator_to_reg(cpu, &cpu->regy);       return true;
 
-    case CLC: s502_clear_psr_flags(cpu, C_BIT_FLAG);                        return true;
-    case CLD: s502_clear_psr_flags(cpu, D_BIT_FLAG);                        return true;
-    case CLI: s502_clear_psr_flags(cpu, I_BIT_FLAG);                        return true;
-    case CLV: s502_clear_psr_flags(cpu, V_BIT_FLAG);                        return true;
-    case SEC: s502_set_psr_flags(cpu, C_BIT_FLAG);                          return true;
-    case SED: s502_set_psr_flags(cpu, D_BIT_FLAG);                          return true;
-    case SEI: s502_set_psr_flags(cpu, I_BIT_FLAG);                          return true;
+    case CLC: mos_clear_psr_flags(cpu, C_BIT_FLAG);                   return true;
+    case CLD: mos_clear_psr_flags(cpu, D_BIT_FLAG);                   return true;
+    case CLI: mos_clear_psr_flags(cpu, I_BIT_FLAG);                   return true;
+    case CLV: mos_clear_psr_flags(cpu, V_BIT_FLAG);                   return true;
+    case SEC: mos_set_psr_flags(cpu, C_BIT_FLAG);                     return true;
+    case SED: mos_set_psr_flags(cpu, D_BIT_FLAG);                     return true;
+    case SEI: mos_set_psr_flags(cpu, I_BIT_FLAG);                     return true;
 
-    case ADC: s502_add_with_carry(cpu, instruction);                        return true;
-    case SBC: s502_sub_with_carry(cpu, instruction);                        return true;
-    case CMP: s502_compare_reg_with_data(cpu, instruction, cpu->racc); return true;
-    case CPX: s502_compare_reg_with_data(cpu, instruction, cpu->regx); return true;
-    case CPY: s502_compare_reg_with_data(cpu, instruction, cpu->regy); return true;
+    case ADC: mos_add_with_carry(cpu, instruction);                   return true;
+    case SBC: mos_sub_with_carry(cpu, instruction);                   return true;
+    case CMP: mos_compare_reg_with_data(cpu, instruction, cpu->racc); return true;
+    case CPX: mos_compare_reg_with_data(cpu, instruction, cpu->regx); return true;
+    case CPY: mos_compare_reg_with_data(cpu, instruction, cpu->regy); return true;
 
-    case TSX: s502_transfer_stack_to_reg(cpu, &cpu->regx);             return true;
-    case TXS: s502_push_reg_to_stack(cpu, cpu->regx);                  return true;
-    case PHA: s502_push_reg_to_stack(cpu, cpu->racc);                  return true;
-    case PHP: s502_push_reg_to_stack(cpu, cpu->psr);                   return true;
-    case PLA: s502_pull_reg_from_stack(cpu, &cpu->racc);               return true;
-    case PLP: s502_pull_reg_from_stack(cpu, &cpu->psr);                return true;
+    case TSX: mos_transfer_stack_to_reg(cpu, &cpu->regx);             return true;
+    case TXS: mos_push_reg_to_stack(cpu, cpu->regx);                  return true;
+    case PHA: mos_push_reg_to_stack(cpu, cpu->racc);                  return true;
+    case PHP: mos_push_reg_to_stack(cpu, cpu->psr);                   return true;
+    case PLA: mos_pull_reg_from_stack(cpu, &cpu->racc);               return true;
+    case PLP: mos_pull_reg_from_stack(cpu, &cpu->psr);                return true;
 
-    case ORA: s502_logical_or(cpu, instruction);                            return true;
-    case AND: s502_logical_and(cpu, instruction);                           return true;
-    case EOR: s502_logical_xor(cpu, instruction);                           return true;
-    case BIT: s502_bit_test(cpu, instruction);                              return true;
+    case ORA: mos_logical_or(cpu, instruction);                       return true;
+    case AND: mos_logical_and(cpu, instruction);                      return true;
+    case EOR: mos_logical_xor(cpu, instruction);                      return true;
+    case BIT: mos_bit_test(cpu, instruction);                         return true;
 
-    case BNE: s502_branch_flag_clear(cpu, instruction, Z_BIT_FLAG);         return true;
-    case BCC: s502_branch_flag_clear(cpu, instruction, C_BIT_FLAG);         return true;
-    case BPL: s502_branch_flag_clear(cpu, instruction, N_BIT_FLAG);         return true;
-    case BVC: s502_branch_flag_clear(cpu, instruction, V_BIT_FLAG);         return true;
-    case BEQ: s502_branch_flag_set(cpu, instruction, Z_BIT_FLAG);           return true;
-    case BCS: s502_branch_flag_set(cpu, instruction, C_BIT_FLAG);           return true;
-    case BMI: s502_branch_flag_set(cpu, instruction, N_BIT_FLAG);           return true;
-    case BVS: s502_branch_flag_set(cpu, instruction, V_BIT_FLAG);           return true;
+    case BNE: mos_branch_flag_clear(cpu, instruction, Z_BIT_FLAG);    return true;
+    case BCC: mos_branch_flag_clear(cpu, instruction, C_BIT_FLAG);    return true;
+    case BPL: mos_branch_flag_clear(cpu, instruction, N_BIT_FLAG);    return true;
+    case BVC: mos_branch_flag_clear(cpu, instruction, V_BIT_FLAG);    return true;
+    case BEQ: mos_branch_flag_set(cpu, instruction, Z_BIT_FLAG);      return true;
+    case BCS: mos_branch_flag_set(cpu, instruction, C_BIT_FLAG);      return true;
+    case BMI: mos_branch_flag_set(cpu, instruction, N_BIT_FLAG);      return true;
+    case BVS: mos_branch_flag_set(cpu, instruction, V_BIT_FLAG);      return true;
 
-    case BRK: s502_break(cpu);                                              return true;
+    case INC:                                                         return true;
+    case INX:                                                         return true;
+    case INY:                                                         return true;
+    case DEX:                                                         return true;
+    case DEY:                                                         return true;
+    case DEC:                                                         return true;
 
-    case NOP: UNIMPLEMENTED("NOP");
-    case RTI: UNIMPLEMENTED("RTI");
-    case RTS: UNIMPLEMENTED("RTS");
-    case JMP: UNIMPLEMENTED("JMP");
-    case JSR: UNIMPLEMENTED("JSR");
+    case BRK: mos_break(cpu);                                         return true;
 
+    case NOP: MOS_UNIMPLEMENTED("NOP");
+    case RTI: MOS_UNIMPLEMENTED("RTI");
+    case RTS: MOS_UNIMPLEMENTED("RTS");
+    case JMP: MOS_UNIMPLEMENTED("JMP");
+    case JSR: MOS_UNIMPLEMENTED("JSR");
 
-    case INC: UNIMPLEMENTED("INC");
-    case INX: UNIMPLEMENTED("INX");
-    case INY: UNIMPLEMENTED("INY");
-    case DEX: UNIMPLEMENTED("DEX");
-    case DEY: UNIMPLEMENTED("DEY");
-    case DEC: UNIMPLEMENTED("DEC");
-
-    case ASL: UNIMPLEMENTED("ASL");
-    case LSR: UNIMPLEMENTED("LSR");
-    case ROL: UNIMPLEMENTED("ROL");
-    case ROR: UNIMPLEMENTED("ROR");
+    case ASL: MOS_UNIMPLEMENTED("ASL");
+    case LSR: MOS_UNIMPLEMENTED("LSR");
+    case ROL: MOS_UNIMPLEMENTED("ROL");
+    case ROR: MOS_UNIMPLEMENTED("ROR");
     case ERROR_FETCH_DATA:
     case ERROR_FETCH_LOCATION:
     default:
-        UNREACHABLE("decode");
+        MOS_UNREACHABLE("decode");
         return false;
     }
 }

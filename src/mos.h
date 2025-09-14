@@ -194,86 +194,86 @@ typedef struct {
 extern Opcode_Info opcode_matrix[UINT8_MAX + 1];
 
 // Functions Declarations
-const char *s502_addr_mode_as_cstr(Addressing_Modes mode);
-const char *s502_opcode_as_cstr(Opcode opcode);
-const char *s502_operand_type_as_cstr(Operand_Type type);
+const char *mos_addr_mode_as_cstr(Addressing_Modes mode);
+const char *mos_opcode_as_cstr(Opcode opcode);
+const char *mos_operand_type_as_cstr(Operand_Type type);
 
-#define ARRAY_LEN(xs) (sizeof(xs) / sizeof(xs[0]))
+#define MOS_ARRAY_LEN(xs) (sizeof(xs) / sizeof(xs[0]))
 
-#define UNIMPLEMENTED(message)                                          \
+#define MOS_UNIMPLEMENTED(message)                                          \
     do {                                                                \
         fprintf(stderr, "ERROR: %s not implemented yet!!!\n", message) ;  \
         abort();                                                        \
     } while (0)
 
-#define UNREACHABLE(message)                                        \
+#define MOS_UNREACHABLE(message)                                        \
     do {                                                            \
         fprintf(stderr, "ERROR: `%s` unreachable!!!!\n", message);  \
         abort();                                                    \
     } while (0)
 
-#define ILLEGAL_ADDRESSING(mode, opcode)                    \
+#define MOS_ILLEGAL_ADDRESSING(mode, opcode)                    \
     do {                                                    \
         fprintf(stderr, "ERROR: Invalid `%s` mode on %s\n", \
-                s502_addr_mode_as_cstr(mode),               \
-                s502_opcode_as_cstr(opcode));               \
+                mos_addr_mode_as_cstr(mode),               \
+                mos_opcode_as_cstr(opcode));               \
         abort();                                            \
     } while (0)
 
-#define ILLEGAL_ACCESS(mode, operand)                                   \
+#define MOS_ILLEGAL_ACCESS(mode, operand)                                   \
     do {                                                                \
-        assert(s502_operand_type_as_cstr(operand));                     \
+        assert(mos_operand_type_as_cstr(operand));                     \
         fprintf(stderr, "ERROR: Invalid `%s` type on `%s` mode. \n",    \
-                s502_operand_type_as_cstr(operand),                     \
-                s502_addr_mode_as_cstr(mode));                          \
+                mos_operand_type_as_cstr(operand),                     \
+                mos_addr_mode_as_cstr(mode));                          \
         abort();                                                        \
     } while (0)
 
-CPU s502_cpu_init(void);
+CPU mos_cpu_init(void);
 
-uint8_t s502_read_memory(void *device, Location location);
-void s502_write_memory(void *device, Location location, uint8_t data);
-uint8_t s502_cpu_read(CPU *cpu, uint16_t addr);
-void s502_cpu_write(CPU *cpu, uint16_t addr, uint8_t data);
+uint8_t mos_read_memory(void *device, Location location);
+void mos_write_memory(void *device, Location location, uint8_t data);
+uint8_t mos_cpu_read(CPU *cpu, uint16_t addr);
+void mos_cpu_write(CPU *cpu, uint16_t addr, uint8_t data);
 
-void s502_push_stack(CPU *cpu, uint8_t value);
-uint8_t s502_pull_stack(CPU *cpu);
+void mos_push_stack(CPU *cpu, uint8_t value);
+uint8_t mos_pull_stack(CPU *cpu);
 
-void s502_set_psr_flags(CPU *cpu, Status_Flags flags);
-void s502_clear_psr_flags(CPU *cpu, Status_Flags flags);
+void mos_set_psr_flags(CPU *cpu, Status_Flags flags);
+void mos_clear_psr_flags(CPU *cpu, Status_Flags flags);
 
-uint8_t s502_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand);
-Location s502_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand operand);
+uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand);
+Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand operand);
 
-void s502_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type);
-void s502_store_reg(CPU *cpu, Instruction instruction, uint8_t data);
+void mos_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type);
+void mos_store_reg(CPU *cpu, Instruction instruction, uint8_t data);
 
-void s502_transfer_reg_to_accumulator(CPU *cpu, uint8_t data);
-void s502_transfer_accumulator_to_reg(CPU *cpu, uint8_t *reg_type);
+void mos_transfer_reg_to_accumulator(CPU *cpu, uint8_t data);
+void mos_transfer_accumulator_to_reg(CPU *cpu, uint8_t *reg_type);
 
-void s502_add_with_carry(CPU *cpu, Instruction instruction);
-void s502_sub_with_carry(CPU *cpu, Instruction instruction);
+void mos_add_with_carry(CPU *cpu, Instruction instruction);
+void mos_sub_with_carry(CPU *cpu, Instruction instruction);
 
-void s502_compare_reg_with_data(CPU *cpu, Instruction instruction, uint8_t reg_type);
+void mos_compare_reg_with_data(CPU *cpu, Instruction instruction, uint8_t reg_type);
 
-void s502_transfer_stack_to_reg(CPU *cpu, uint8_t *data);
-void s502_push_reg_to_stack(CPU *cpu, uint8_t reg_type);
-void s502_pull_reg_from_stack(CPU *cpu, uint8_t *reg_type);
+void mos_transfer_stack_to_reg(CPU *cpu, uint8_t *data);
+void mos_push_reg_to_stack(CPU *cpu, uint8_t reg_type);
+void mos_pull_reg_from_stack(CPU *cpu, uint8_t *reg_type);
 
-void s502_logical_and(CPU *cpu, Instruction instruction);
-void s502_logical_xor(CPU *cpu, Instruction instruction);
-void s502_logical_or(CPU *cpu, Instruction instruction);
-void s502_bit_test(CPU *cpu, Instruction instruction);
+void mos_logical_and(CPU *cpu, Instruction instruction);
+void mos_logical_xor(CPU *cpu, Instruction instruction);
+void mos_logical_or(CPU *cpu, Instruction instruction);
+void mos_bit_test(CPU *cpu, Instruction instruction);
 
-void s502_branch_flag_clear(CPU *cpu, Instruction instruction, Status_Flags flag);
-void s502_branch_flag_set(CPU *cpu, Instruction instruction, Status_Flags flag);
+void mos_branch_flag_clear(CPU *cpu, Instruction instruction, Status_Flags flag);
+void mos_branch_flag_set(CPU *cpu, Instruction instruction, Status_Flags flag);
 
-void s502_break(CPU *cpu);
-bool s502_decode(CPU *cpu, Instruction instruction);
+void mos_break(CPU *cpu);
+bool mos_decode(CPU *cpu, Instruction instruction);
 
 
 // Helper functions
-void uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte);
-uint16_t bytes_to_uint16_t(uint8_t a, uint8_t b);
-Location uint16_t_to_loc(uint16_t sixteen_bit);
+void mos_uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte);
+uint16_t mos_bytes_to_uint16_t(uint8_t a, uint8_t b);
+Location mos_uint16_t_to_loc(uint16_t sixteen_bit);
 #endif // EMULATOR_6502_H_

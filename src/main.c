@@ -7,12 +7,12 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "./s502.h"
+#include "./mos.h"
 
-Instruction s502_fetch_instruction(CPU *cpu)
+Instruction mos_fetch_instruction(CPU *cpu)
 {
     Instruction inst = {0};
-    uint8_t data = s502_cpu_read(cpu, cpu->pc);
+    uint8_t data = mos_cpu_read(cpu, cpu->pc);
     cpu->pc++;
 
     Opcode_Info info = opcode_matrix[data];
@@ -23,7 +23,7 @@ Instruction s502_fetch_instruction(CPU *cpu)
     case ACCU:
         break;
     case IMME: {
-        inst.operand.data.data = s502_cpu_read(cpu, cpu->pc);
+        inst.operand.data.data = mos_cpu_read(cpu, cpu->pc);
         inst.operand.type = OPERAND_DATA;
         cpu->pc++;
     } break;
@@ -32,15 +32,15 @@ Instruction s502_fetch_instruction(CPU *cpu)
     case ZPY:
         break;
     case REL: {
-        inst.operand.data.data = s502_cpu_read(cpu, cpu->pc);
+        inst.operand.data.data = mos_cpu_read(cpu, cpu->pc);
         inst.operand.type = OPERAND_DATA;
         cpu->pc++;
     } break;
     case ABS: {
-        uint8_t offset = s502_cpu_read(cpu, cpu->pc);
+        uint8_t offset = mos_cpu_read(cpu, cpu->pc);
         cpu->pc++;
-        uint8_t page = s502_cpu_read(cpu, cpu->pc);
-        uint16_t abs = bytes_to_uint16_t(page, offset);
+        uint8_t page = mos_cpu_read(cpu, cpu->pc);
+        uint16_t abs = mos_bytes_to_uint16_t(page, offset);
         inst.operand.data.address.absolute = abs;
         inst.operand.type = OPERAND_ABSOLUTE;
         cpu->pc++;
@@ -80,33 +80,34 @@ int main(void)
 
     array_append(&instructions, 0x00); // BRK
 
-    CPU cpu = s502_cpu_init();
+    CPU cpu = mos_cpu_init();
     uint8_t system_ram[0xFFFF] = {0};
 
     MMap_Entry ram = {
         .device = system_ram,
-        .read = s502_read_memory,
-        .write = s502_write_memory,
+        .read = mos_read_memory,
+        .write = mos_write_memory,
         .readonly = false,
         .start_addr = 0X0000,
         .end_addr = 0XFFFF,
     };
 
     array_append(&cpu.entries, ram);
-    s502_cpu_write(&cpu, bytes_to_uint16_t(0x00, 0x00), 0xA);
-    s502_cpu_write(&cpu, bytes_to_uint16_t(0x00, 0x01), 0xA);
+    mos_cpu_write(&cpu, mos_bytes_to_uint16_t(0x00, 0x00), 0xA);
+    mos_cpu_write(&cpu, mos_bytes_to_uint16_t(0x00, 0x01), 0xA);
 
-    uint16_t addr = bytes_to_uint16_t(0x01, 0xB);
+    uint16_t addr = mos_bytes_to_uint16_t(0x01, 0xB);
     for (uint32_t i = 0; i < instructions.count; ++i) {
-        s502_cpu_write(&cpu, addr + i, instructions.items[i]);
+        mos_cpu_write(&cpu, addr + i, instructions.items[i]);
     }
-    cpu.pc = bytes_to_uint16_t(0x01, 0xB);
+    cpu.pc = mos_bytes_to_uint16_t(0x01, 0xB);
 
     while (1) {
-        Instruction inst = s502_fetch_instruction(&cpu);
-        if (!s502_decode(&cpu, inst)) return 1;
+        Instruction inst = mos_fetch_instruction(&cpu);
+        if (!mos_decode(&cpu, inst)) return 1;
         if (inst.opcode == BRK) break;
     }
-    printf("Result: %u\n", s502_cpu_read(&cpu, bytes_to_uint16_t(0x00, 0x02)));
+    printf("Result: %u\n", mos_cpu_read(&cpu, mos_bytes_to_uint16_t(0x00, 0x02)));
+    printf("PC: 0x%x\n", cpu.pc);
     return 0;
 }
