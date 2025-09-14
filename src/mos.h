@@ -1,22 +1,22 @@
-#ifndef EMULATOR_6502_H_
-#define EMULATOR_6502_H_
+#ifndef MOS_6502_EMULATOR_H_
+#define MOS_6502_EMULATOR_H_
 
-#define MAX_OFFSET UINT8_MAX
-#define MAX_PAGES  UINT8_MAX
-#define ZERO_PAGE  0x00
-#define STACK_PAGE 0x01
+#define MOS_MAX_OFFSET UINT8_MAX
+#define MOS_MAX_PAGES  UINT8_MAX
+#define MOS_ZERO_PAGE  0x00
+#define MOS_STACK_PAGE 0x01
 
 #include "./array.h"
 
 typedef struct Location Location;
 
 typedef uint8_t (*read_memory)(void *, Location);
-typedef void (*write_memory)(void *, Location, uint8_t);
+typedef void    (*write_memory)(void *, Location, uint8_t);
 
 typedef struct {
-    read_memory read;
-    write_memory write;
     void *device;
+    read_memory  read;
+    write_memory write;
     uint16_t start_addr;
     uint16_t end_addr;
     bool readonly;
@@ -202,19 +202,19 @@ const char *mos_operand_type_as_cstr(Operand_Type type);
 
 #define MOS_UNIMPLEMENTED(message)                                          \
     do {                                                                \
-        fprintf(stderr, "ERROR: %s not implemented yet!!!\n", message) ;  \
+        fprintf(stderr, "[ERROR]: %s not implemented yet!!!\n", message) ;  \
         abort();                                                        \
     } while (0)
 
 #define MOS_UNREACHABLE(message)                                        \
     do {                                                            \
-        fprintf(stderr, "ERROR: `%s` unreachable!!!!\n", message);  \
+        fprintf(stderr, "[ERROR]: `%s` unreachable!!!!\n", message);  \
         abort();                                                    \
     } while (0)
 
 #define MOS_ILLEGAL_ADDRESSING(mode, opcode)                    \
     do {                                                    \
-        fprintf(stderr, "ERROR: Invalid `%s` mode on %s\n", \
+        fprintf(stderr, "[ERROR]: Invalid `%s` mode on %s\n", \
                 mos_addr_mode_as_cstr(mode),               \
                 mos_opcode_as_cstr(opcode));               \
         abort();                                            \
@@ -223,7 +223,7 @@ const char *mos_operand_type_as_cstr(Operand_Type type);
 #define MOS_ILLEGAL_ACCESS(mode, operand)                                   \
     do {                                                                \
         assert(mos_operand_type_as_cstr(operand));                     \
-        fprintf(stderr, "ERROR: Invalid `%s` type on `%s` mode. \n",    \
+        fprintf(stderr, "[ERROR]: Invalid `%s` type on `%s` mode. \n",    \
                 mos_operand_type_as_cstr(operand),                     \
                 mos_addr_mode_as_cstr(mode));                          \
         abort();                                                        \
@@ -232,17 +232,17 @@ const char *mos_operand_type_as_cstr(Operand_Type type);
 CPU mos_cpu_init(void);
 
 uint8_t mos_read_memory(void *device, Location location);
-void mos_write_memory(void *device, Location location, uint8_t data);
+void    mos_write_memory(void *device, Location location, uint8_t data);
 uint8_t mos_cpu_read(CPU *cpu, uint16_t addr);
-void mos_cpu_write(CPU *cpu, uint16_t addr, uint8_t data);
+void    mos_cpu_write(CPU *cpu, uint16_t addr, uint8_t data);
 
-void mos_push_stack(CPU *cpu, uint8_t value);
+void    mos_push_stack(CPU *cpu, uint8_t value);
 uint8_t mos_pull_stack(CPU *cpu);
 
 void mos_set_psr_flags(CPU *cpu, Status_Flags flags);
 void mos_clear_psr_flags(CPU *cpu, Status_Flags flags);
 
-uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand);
+uint8_t  mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand);
 Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand operand);
 
 void mos_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type);
@@ -273,7 +273,8 @@ bool mos_decode(CPU *cpu, Instruction instruction);
 
 
 // Helper functions
-void mos_uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte);
+void     mos_uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte);
 uint16_t mos_bytes_to_uint16_t(uint8_t a, uint8_t b);
 Location mos_uint16_t_to_loc(uint16_t sixteen_bit);
-#endif // EMULATOR_6502_H_
+
+#endif // MOS_6502_EMULATOR_H_

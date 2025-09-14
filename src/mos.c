@@ -120,14 +120,14 @@ void mos_cpu_write(CPU *cpu, uint16_t addr, uint8_t data)
 void mos_push_stack(CPU *cpu, uint8_t value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
-    mos_cpu_write(cpu, mos_bytes_to_uint16_t(STACK_PAGE, cpu->sp), value);
+    mos_cpu_write(cpu, mos_bytes_to_uint16_t(MOS_STACK_PAGE, cpu->sp), value);
     cpu->sp--;
 }
 
 uint8_t mos_pull_stack(CPU *cpu)
 {
     cpu->sp++;
-    return mos_cpu_read(cpu, mos_bytes_to_uint16_t(STACK_PAGE, cpu->sp));
+    return mos_cpu_read(cpu, mos_bytes_to_uint16_t(MOS_STACK_PAGE, cpu->sp));
 }
 
 
@@ -270,7 +270,7 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
 
     case ZPX: {
         // zero page X modes sums x reg to the zero page operand and uses it as index
-        // It wraps around incase it exceeds page MAX_OFFSET
+        // It wraps around incase it exceeds page MOS_MAX_OFFSET
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
@@ -412,7 +412,7 @@ Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand ope
 
     case ZPX: {
         // zero page X modes sums x reg to the zero page operand and uses it as index
-        // It wraps around incase it exceeds page MAX_OFFSET
+        // It wraps around incase it exceeds page MOS_MAX_OFFSET
         switch (operand.type) {
         case OPERAND_LOCATION: {
             Location location = operand.data.address.loc;
@@ -607,7 +607,7 @@ void mos_compare_reg_with_data(CPU *cpu, Instruction instruction, uint8_t reg_ty
 
 void mos_transfer_stack_to_reg(CPU *cpu, uint8_t *data)
 {
-    *data = mos_cpu_read(cpu, mos_bytes_to_uint16_t(STACK_PAGE, cpu->sp));
+    *data = mos_cpu_read(cpu, mos_bytes_to_uint16_t(MOS_STACK_PAGE, cpu->sp));
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
     if (*data == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
     if (*data & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
@@ -700,7 +700,7 @@ void mos_break(CPU *cpu)
     mos_push_stack(cpu, pc_low_byte); // Push lower-byte second
     mos_push_stack(cpu, cpu->psr); // Push the Process Status reg
     // TODO: Make the Interrupt vector a const variable
-    cpu->pc = mos_cpu_read(cpu, mos_bytes_to_uint16_t(MAX_PAGES, MAX_OFFSET)); // load the Interrupt Vector into the Program Counter
+    cpu->pc = mos_cpu_read(cpu, mos_bytes_to_uint16_t(MOS_MAX_PAGES, MOS_MAX_OFFSET)); // load the Interrupt Vector into the Program Counter
     printf("Program Interrupted\n");
 }
 
