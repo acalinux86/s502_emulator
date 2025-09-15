@@ -6,6 +6,13 @@
 #define MOS_ZERO_PAGE  0x00
 #define MOS_STACK_PAGE 0x01
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <stdint.h>
+#include <stdbool.h>
+
 #include "./array.h"
 
 typedef struct Location Location;
