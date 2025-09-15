@@ -732,6 +732,7 @@ void mos_increment(CPU *cpu, Instruction instruction)
 
 void mos_break(CPU *cpu)
 {
+    mos_clear_psr_flags(cpu, B_BIT_FLAG);
     mos_set_psr_flags(cpu, B_BIT_FLAG);
     uint8_t pc_high_byte, pc_low_byte;
     mos_uint16_t_to_bytes(cpu->pc, &pc_high_byte, &pc_low_byte); // Split the Program Counter
