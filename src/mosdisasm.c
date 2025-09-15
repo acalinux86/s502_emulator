@@ -1,4 +1,4 @@
-// 6502 Disassembler
+// Mos 6502 Disassembler
 
 #include "./mos.h"
 
