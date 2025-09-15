@@ -40,10 +40,10 @@ Instruction mos_fetch_instruction(CPU *cpu)
         uint8_t offset = mos_cpu_read(cpu, cpu->pc);
         cpu->pc++;
         uint8_t page = mos_cpu_read(cpu, cpu->pc);
+        cpu->pc++;
         uint16_t abs = mos_bytes_to_uint16_t(page, offset);
         inst.operand.data.address.absolute = abs;
         inst.operand.type = OPERAND_ABSOLUTE;
-        cpu->pc++;
     } break;
     case ABSX:
     case ABSY:
@@ -78,6 +78,10 @@ int main(void)
     array_append(&instructions, 0x02);
     array_append(&instructions, 0x00);
 
+    array_append(&instructions, 0xCE); // DEC
+    array_append(&instructions, 0x02);
+    array_append(&instructions, 0x00);
+
     array_append(&instructions, 0x00); // BRK
 
     CPU cpu = mos_cpu_init();
@@ -99,15 +103,16 @@ int main(void)
     uint16_t addr = mos_bytes_to_uint16_t(0x01, 0xB);
     for (uint32_t i = 0; i < instructions.count; ++i) {
         mos_cpu_write(&cpu, addr + i, instructions.items[i]);
+        printf("Inst: 0x%02X\n", instructions.items[i]);
     }
-    cpu.pc = mos_bytes_to_uint16_t(0x01, 0xB);
-
+    cpu.pc = addr;
+    printf("PC: 0x%02X\n", cpu.pc);
     while (1) {
         Instruction inst = mos_fetch_instruction(&cpu);
         if (!mos_decode(&cpu, inst)) return 1;
         if (inst.opcode == BRK) break;
     }
-    printf("Result: %u\n", mos_cpu_read(&cpu, mos_bytes_to_uint16_t(0x00, 0x02)));
-    printf("PC: 0x%x\n", cpu.pc);
+    printf("Result: 0X%X\n", mos_cpu_read(&cpu, mos_bytes_to_uint16_t(0x00, 0x02)));
+    printf("PC: 0x%02X\n", cpu.pc);
     return 0;
 }
