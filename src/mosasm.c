@@ -1,8 +1,8 @@
-// 6502 Assembler
+// Mos 6502 Assembler
 
 #include "./mos.h"
 
-// Provide details about the file in Usage
+// TODO: Provide details about the file in Usage
 int main(void)
 {
     return 0;
