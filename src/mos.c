@@ -1,13 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
-#include <stdint.h>
-#include <stdbool.h>
-
 #include "./mos.h"
 
-#define MOS_ASSERT(condition, message)                     \
+#define MOS_ASSERT(condition, message)                      \
     do {                                                    \
         if (!(condition)) {                                 \
             fprintf(stderr, "CPU FAULT: %s\n", message);    \
@@ -632,7 +625,7 @@ void mos_logical_and(CPU *cpu, Instruction instruction)
 
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
     if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) mos_clear_psr_flags(cpu, N_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
     cpu->racc = result;
 }
 
@@ -643,7 +636,7 @@ void mos_logical_xor(CPU *cpu, Instruction instruction)
 
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
     if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) mos_clear_psr_flags(cpu, N_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
     cpu->racc = result;
 }
 
@@ -654,7 +647,7 @@ void mos_logical_or(CPU *cpu, Instruction instruction)
 
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
     if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
-    if (result & N_BIT_FLAG) mos_clear_psr_flags(cpu, N_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
     cpu->racc = result;
 }
 
@@ -685,10 +678,56 @@ void mos_branch_flag_set(CPU *cpu, Instruction instruction, Status_Flags flag)
     }
 }
 
+void mos_decrement_regx(CPU *cpu)
+{
+    cpu->regx--;
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu->regx == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (cpu->regx & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+}
+
+void mos_decrement_regy(CPU *cpu)
+{
+    cpu->regy--;
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu->regy == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (cpu->regy & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+}
+
 void mos_decrement(CPU *cpu, Instruction instruction)
 {
-    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
-    (void) data;
+    Location loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_cpu_read(cpu, mos_loc_to_uint16_t(loc));
+    mos_cpu_write(cpu, mos_loc_to_uint16_t(loc), --data); // Decrement
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (data == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (data & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+}
+
+void mos_increment_regx(CPU *cpu)
+{
+    cpu->regx++;
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu->regx == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (cpu->regx & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+}
+
+void mos_increment_regy(CPU *cpu)
+{
+    cpu->regy++;
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu->regy == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (cpu->regy & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+}
+
+void mos_increment(CPU *cpu, Instruction instruction)
+{
+    Location loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_cpu_read(cpu, mos_loc_to_uint16_t(loc));
+    mos_cpu_write(cpu, mos_loc_to_uint16_t(loc), ++data); // Increment
+    mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
+    if (data == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (data & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
 void mos_break(CPU *cpu)
@@ -755,12 +794,17 @@ bool mos_decode(CPU *cpu, Instruction instruction)
     case BMI: mos_branch_flag_set(cpu, instruction, N_BIT_FLAG);      return true;
     case BVS: mos_branch_flag_set(cpu, instruction, V_BIT_FLAG);      return true;
 
-    case INC:                                                         return true;
-    case INX:                                                         return true;
-    case INY:                                                         return true;
-    case DEX:                                                         return true;
-    case DEY:                                                         return true;
-    case DEC:                                                         return true;
+    case INC: mos_increment(cpu, instruction);                        return true;
+    case INX: mos_increment_regx(cpu);                                return true;
+    case INY: mos_increment_regy(cpu);                                return true;
+    case DEX: mos_decrement_regx(cpu);                                return true;
+    case DEY: mos_decrement_regy(cpu);                                return true;
+    case DEC: mos_decrement(cpu, instruction);                        return true;
+
+    case ASL: MOS_UNIMPLEMENTED("ASL");
+    case LSR: MOS_UNIMPLEMENTED("LSR");
+    case ROL: MOS_UNIMPLEMENTED("ROL");
+    case ROR: MOS_UNIMPLEMENTED("ROR");
 
     case BRK: mos_break(cpu);                                         return true;
 
@@ -770,10 +814,6 @@ bool mos_decode(CPU *cpu, Instruction instruction)
     case JMP: MOS_UNIMPLEMENTED("JMP");
     case JSR: MOS_UNIMPLEMENTED("JSR");
 
-    case ASL: MOS_UNIMPLEMENTED("ASL");
-    case LSR: MOS_UNIMPLEMENTED("LSR");
-    case ROL: MOS_UNIMPLEMENTED("ROL");
-    case ROR: MOS_UNIMPLEMENTED("ROR");
     case ERROR_FETCH_DATA:
     case ERROR_FETCH_LOCATION:
     default:
