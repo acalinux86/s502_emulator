@@ -82,6 +82,14 @@ int main(void)
     array_append(&instructions, 0x02);
     array_append(&instructions, 0x00);
 
+    array_append(&instructions, 0xEE); // INC
+    array_append(&instructions, 0x02);
+    array_append(&instructions, 0x00);
+
+    array_append(&instructions, 0xEE); // INC
+    array_append(&instructions, 0x02);
+    array_append(&instructions, 0x00);
+
     array_append(&instructions, 0x00); // BRK
 
     CPU cpu = mos_cpu_init();
