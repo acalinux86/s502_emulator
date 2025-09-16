@@ -1,33 +1,5 @@
 #include "./mos.h"
 
-#define MOS_ASSERT(condition, message)                      \
-    do {                                                    \
-        if (!(condition)) {                                 \
-            fprintf(stderr, "CPU FAULT: %s\n", message);    \
-        }                                                   \
-    } while(0)
-
-Opcode_Info opcode_matrix[UINT8_MAX + 1] = {
-    //-0                  -1          -2            -3              -4         -5         -6                 -7           -8          -9           -A              -B          -C          -D          -E          -F
-    {BRK, IMPL},  {ORA, INDX},        {0x00},        {0x00},        {0x00}, {ORA, ZP} ,  {ASL, ZP},      {0x00},  {PHP, IMPL}, {ORA, IMME},   {ASL, ACCU},        {0x00},      {0x00},  {ORA, ABS},   {ASL, ABS},    {0x00}, // 0-
-    {BPL, REL} ,  {ORA, INDY},        {0x00},        {0x00},        {0x00}, {ORA, ZPX}, {ASL, ZPX},      {0x00},  {CLC, IMPL}, {ORA, ABSY},        {0x00},        {0x00},      {0x00}, {ORA, ABSX},  {ASL, ABSX},    {0x00}, // 1-
-    {JSR, ABS} ,  {AND, INDX},        {0x00},        {0x00},     {BIT, ZP}, {AND, ZP} ,  {ROL, ZP},      {0x00},  {PLP, IMPL}, {AND, IMME},   {ROL, ACCU},        {0x00},  {BIT, ABS},  {AND, ABS},   {ROL, ABS},    {0x00}, // 2-
-    {BMI, REL} ,  {AND, INDY},        {0x00},        {0x00},        {0x00}, {AND, ZPX}, {ROL, ZPX},      {0x00},  {SEC, IMPL}, {AND, ABSY},        {0x00},        {0x00},      {0x00}, {AND, ABSX},  {ROL, ABSX},    {0x00}, // 3-
-    {RTI, IMPL},  {EOR, INDX},        {0x00},        {0x00},        {0x00}, {EOR, ZP} ,  {LSR, ZP},      {0x00},  {PHA, IMPL}, {EOR, IMME},    {LSR, ABS},        {0x00},  {JMP, ABS},  {EOR, ABS},   {LSR, ABS},    {0x00}, // 4-
-    {BVC, REL} ,  {EOR, INDY},        {0x00},        {0x00},        {0x00}, {EOR, ZPX}, {LSR, ZPX},      {0x00},  {CLI, IMPL}, {EOR, ABSY},        {0x00},        {0x00},      {0x00}, {EOR, ABSX},  {LSR, ABSX},    {0x00}, // 5-
-    {RTS, IMPL},  {ADC, INDX},        {0x00},        {0x00},        {0x00}, {ADC, ZP} ,  {ROR, ZP},      {0x00},  {PLA, IMPL}, {ADC, IMME},   {ROR, ACCU},        {0x00},  {JMP, IND},  {ADC, ABS},   {ROR, ABS},    {0x00}, // 6-
-    {BVS, REL} ,  {ADC, INDY},        {0x00},        {0x00},        {0x00}, {ADC, ZPX}, {ROR, ZPX},      {0x00},  {SEI, IMPL}, {ADC, ABSY},        {0x00},        {0x00},      {0x00}, {ADC, ABSX},  {ROR, ABSX},    {0x00}, // 7-
-         {0x00},  {STA, INDX},        {0x00},        {0x00},     {STY, ZP}, {STA, ZP} ,  {STX, ZP},      {0x00},  {DEY, IMPL},      {0x00},   {TXA, IMPL},        {0x00},  {STY, ABS},  {STA, ABS},   {STX, ABS},    {0x00}, // 8-
-    {BCC, REL} ,  {STA, INDY},        {0x00},        {0x00},    {STY, ZPX}, {STA, ZPX}, {STX, ZPY},      {0x00},  {TYA, IMPL}, {STA, ABSY},   {TXS, IMPL},        {0x00},      {0x00}, {STA, ABSX},       {0x00},    {0x00}, // 9-
-    {LDY, IMME},  {LDA, INDX},   {LDX, IMME},        {0x00},     {LDY, ZP}, {LDA, ZP} ,  {LDX, ZP},      {0x00},  {TAY, IMPL}, {LDA, IMME},   {TAX, IMPL},        {0x00},  {LDY, ABS},  {LDA, ABS},   {LDX, ABS},    {0x00}, // A-
-    {BCS, REL} ,  {LDA, INDY},        {0x00},        {0x00},    {LDY, ZPX}, {LDA, ZPX}, {LDX, ZPY},      {0x00},  {CLV, IMPL}, {LDA, ABSY},   {TSX, IMPL},        {0x00}, {LDY, ABSX}, {LDA, ABSX},  {LDX, ABSY},    {0x00}, // B-
-    {CPY, IMME},  {CMP, INDX},        {0x00},        {0x00},     {CPY, ZP}, {CMP, ZP} ,  {DEC, ZP},      {0x00},  {INY, IMPL}, {CMP, IMME},   {DEX, IMPL},        {0x00},  {CPY, ABS},  {CMP, ABS},   {DEC, ABS},    {0x00}, // C-
-    {BNE, REL} ,  {CMP, INDY},        {0x00},        {0x00},        {0x00}, {CMP, ZPX}, {DEC, ZPX},      {0x00},  {CLD, IMPL}, {CMP, ABSY},        {0x00},        {0x00},      {0x00}, {CMP, ABSX},  {DEC, ABSX},    {0x00}, // D-
-    {CPX, IMME},  {SBC, INDX},        {0x00},        {0x00},     {CPX, ZP}, {SBC, ZP} ,  {INC, ZP},      {0x00},  {INX, IMPL}, {SBC, IMME},   {NOP, IMPL},        {0x00},  {CPX, ABS},  {SBC, ABS},   {INC, ABS},    {0x00}, // E-
-    {BEQ, REL} ,  {SBC, INDY},        {0x00},        {0x00},        {0x00}, {SBC, ZPX}, {INC, ZPX},      {0x00},  {SED, IMPL}, {SBC, ABSY},        {0x00},        {0x00},      {0x00}, {SBC, ABSX},  {INC, ABSX},    {0x00}, // F-
-};
-
-// Helper Functions
 void mos_uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte)
 {
     *high_byte = sixteen_bit >> 8; // higher byte
@@ -60,12 +32,8 @@ uint16_t mos_loc_to_uint16_t(Location loc)
 CPU mos_cpu_init(void)
 {
     CPU cpu = {0};
-    cpu.regx = 0;
-    cpu.regy = 0;
-    cpu.racc = 0;
-    cpu.pc = 0;
-    cpu.pc = U_BIT_FLAG;
-    cpu.sp = 0xFF;
+    cpu.regx = 0; cpu.regy = 0; cpu.racc = 0;
+    cpu.pc = 0;   cpu.psr = U_BIT_FLAG; cpu.sp = 0xFF;
     array_new(&cpu.entries);
     return cpu;
 }
@@ -121,102 +89,6 @@ uint8_t mos_pull_stack(CPU *cpu)
 {
     cpu->sp++;
     return mos_cpu_read(cpu, mos_bytes_to_uint16_t(MOS_STACK_PAGE, cpu->sp));
-}
-
-
-const char *mos_addr_mode_as_cstr(Addressing_Modes mode)
-{
-    switch (mode) {
-    case IMPL: return "IMPLICIT";
-    case ACCU: return "ACCUMULATOR";
-    case IMME: return "IMMEDIATE";
-    case ZP:   return "ZERO_PAGE";
-    case ZPX:  return "ZERO_PAGE_X";
-    case ZPY:  return "ZERO_PAGE_Y";
-    case REL:  return "RELATIVE";
-    case ABS:  return "ABSOLUTE";
-    case ABSX: return "ABSOLUTE_X";
-    case ABSY: return "ABSOLUTE_Y";
-    case IND:  return "INDIRECT";
-    case INDX: return "INDEXED_INDIRECT";
-    case INDY: return "INDIRECT_INDEXED";
-    default:   return NULL;
-    }
-}
-
-const char *mos_opcode_as_cstr(Opcode opcode)
-{
-    switch (opcode) {
-    case BRK:                  return "BRK";
-    case NOP:                  return "NOP";
-    case RTI:                  return "RTI";
-    case RTS:                  return "RTS";
-    case JMP:                  return "JMP";
-    case JSR:                  return "JSR";
-    case ADC:                  return "ADC";
-    case SBC:                  return "SBC";
-    case CMP:                  return "CMP";
-    case CPX:                  return "CPX";
-    case CPY:                  return "CPY";
-    case LDA:                  return "LDA";
-    case LDY:                  return "LDY";
-    case LDX:                  return "LDX";
-    case STA:                  return "STA";
-    case STY:                  return "STY";
-    case STX:                  return "STX";
-    case CLC:                  return "CLC";
-    case CLV:                  return "CLV";
-    case CLI:                  return "CLI";
-    case CLD:                  return "CLD";
-    case SEC:                  return "SEC";
-    case SED:                  return "SED";
-    case SEI:                  return "SEI";
-    case ORA:                  return "ORA";
-    case AND:                  return "AND";
-    case EOR:                  return "EOR";
-    case BIT:                  return "BIT";
-    case TAX:                  return "TAX";
-    case TAY:                  return "TAY";
-    case TXA:                  return "TXA";
-    case TYA:                  return "TYA";
-    case TSX:                  return "TSX";
-    case TXS:                  return "TXS";
-    case PHA:                  return "PHA";
-    case PHP:                  return "PHP";
-    case PLA:                  return "PLA";
-    case PLP:                  return "PLP";
-    case INC:                  return "INC";
-    case INX:                  return "INX";
-    case INY:                  return "INY";
-    case DEX:                  return "DEX";
-    case DEY:                  return "DEY";
-    case DEC:                  return "DEC";
-    case BNE:                  return "BNE";
-    case BCC:                  return "BCC";
-    case BCS:                  return "BCS";
-    case BEQ:                  return "BEQ";
-    case BMI:                  return "BMI";
-    case BPL:                  return "BPL";
-    case BVC:                  return "BVC";
-    case BVS:                  return "BVS";
-    case ASL:                  return "ASL";
-    case LSR:                  return "LSR";
-    case ROL:                  return "ROL";
-    case ROR:                  return "ROR";
-    case ERROR_FETCH_DATA:     return "ERROR_FETCH_DATA";
-    case ERROR_FETCH_LOCATION: return "ERROR_FETCH_LOCATION";
-    default:                   return NULL;
-    }
-}
-
-const char *mos_operand_type_as_cstr(Operand_Type type)
-{
-    switch (type) {
-    case OPERAND_ABSOLUTE: return "OPERAND_ABSOLUTE";
-    case OPERAND_LOCATION: return "OPERAND_LOCATION";
-    case OPERAND_DATA:     return "OPERAND_DATA";
-    default:               return NULL;
-    }
 }
 
 // NOTE: Set PSR FLAGS
@@ -730,6 +602,26 @@ void mos_increment(CPU *cpu, Instruction instruction)
     if (data & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
+void mos_rotate_left(CPU *cpu, uint8_t *data)
+{
+    uint8_t result = *data << 1; // mult
+    mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
+    mos_set_psr_flags(cpu, (cpu->psr >> N_BIT_FLAG) & 1); // Set to the contents of old bit 7 (neg bit)
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    *data = result;
+}
+
+void mos_rotate_right(CPU *cpu, uint8_t *data)
+{
+    uint8_t result = *data >> 1; // div
+    mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
+    mos_set_psr_flags(cpu, (cpu->psr >> C_BIT_FLAG) & 1); // Set to the contents of old bit 0 (carry bit)
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    *data = result;
+}
+
 void mos_break(CPU *cpu)
 {
     mos_clear_psr_flags(cpu, B_BIT_FLAG);
@@ -796,11 +688,11 @@ bool mos_decode(CPU *cpu, Instruction instruction)
     case BVS: mos_branch_flag_set(cpu, instruction, V_BIT_FLAG);      return true;
 
     case INC: mos_increment(cpu, instruction);                        return true;
+    case DEC: mos_decrement(cpu, instruction);                        return true;
     case INX: mos_increment_regx(cpu);                                return true;
     case INY: mos_increment_regy(cpu);                                return true;
     case DEX: mos_decrement_regx(cpu);                                return true;
     case DEY: mos_decrement_regy(cpu);                                return true;
-    case DEC: mos_decrement(cpu, instruction);                        return true;
 
     case ASL: MOS_UNIMPLEMENTED("ASL");
     case LSR: MOS_UNIMPLEMENTED("LSR");
@@ -822,3 +714,118 @@ bool mos_decode(CPU *cpu, Instruction instruction)
         return false;
     }
 }
+
+const char *mos_addr_mode_as_cstr(Addressing_Modes mode)
+{
+    switch (mode) {
+    case IMPL: return "IMPLICIT";
+    case ACCU: return "ACCUMULATOR";
+    case IMME: return "IMMEDIATE";
+    case ZP:   return "ZERO_PAGE";
+    case ZPX:  return "ZERO_PAGE_X";
+    case ZPY:  return "ZERO_PAGE_Y";
+    case REL:  return "RELATIVE";
+    case ABS:  return "ABSOLUTE";
+    case ABSX: return "ABSOLUTE_X";
+    case ABSY: return "ABSOLUTE_Y";
+    case IND:  return "INDIRECT";
+    case INDX: return "INDEXED_INDIRECT";
+    case INDY: return "INDIRECT_INDEXED";
+    default:   return NULL;
+    }
+}
+
+const char *mos_opcode_as_cstr(Opcode opcode)
+{
+    switch (opcode) {
+    case BRK:                  return "BRK";
+    case NOP:                  return "NOP";
+    case RTI:                  return "RTI";
+    case RTS:                  return "RTS";
+    case JMP:                  return "JMP";
+    case JSR:                  return "JSR";
+    case ADC:                  return "ADC";
+    case SBC:                  return "SBC";
+    case CMP:                  return "CMP";
+    case CPX:                  return "CPX";
+    case CPY:                  return "CPY";
+    case LDA:                  return "LDA";
+    case LDY:                  return "LDY";
+    case LDX:                  return "LDX";
+    case STA:                  return "STA";
+    case STY:                  return "STY";
+    case STX:                  return "STX";
+    case CLC:                  return "CLC";
+    case CLV:                  return "CLV";
+    case CLI:                  return "CLI";
+    case CLD:                  return "CLD";
+    case SEC:                  return "SEC";
+    case SED:                  return "SED";
+    case SEI:                  return "SEI";
+    case ORA:                  return "ORA";
+    case AND:                  return "AND";
+    case EOR:                  return "EOR";
+    case BIT:                  return "BIT";
+    case TAX:                  return "TAX";
+    case TAY:                  return "TAY";
+    case TXA:                  return "TXA";
+    case TYA:                  return "TYA";
+    case TSX:                  return "TSX";
+    case TXS:                  return "TXS";
+    case PHA:                  return "PHA";
+    case PHP:                  return "PHP";
+    case PLA:                  return "PLA";
+    case PLP:                  return "PLP";
+    case INC:                  return "INC";
+    case INX:                  return "INX";
+    case INY:                  return "INY";
+    case DEX:                  return "DEX";
+    case DEY:                  return "DEY";
+    case DEC:                  return "DEC";
+    case BNE:                  return "BNE";
+    case BCC:                  return "BCC";
+    case BCS:                  return "BCS";
+    case BEQ:                  return "BEQ";
+    case BMI:                  return "BMI";
+    case BPL:                  return "BPL";
+    case BVC:                  return "BVC";
+    case BVS:                  return "BVS";
+    case ASL:                  return "ASL";
+    case LSR:                  return "LSR";
+    case ROL:                  return "ROL";
+    case ROR:                  return "ROR";
+    case ERROR_FETCH_DATA:     return "ERROR_FETCH_DATA";
+    case ERROR_FETCH_LOCATION: return "ERROR_FETCH_LOCATION";
+    default:                   return NULL;
+    }
+}
+
+const char *mos_operand_type_as_cstr(Operand_Type type)
+{
+    switch (type) {
+    case OPERAND_ABSOLUTE: return "OPERAND_ABSOLUTE";
+    case OPERAND_LOCATION: return "OPERAND_LOCATION";
+    case OPERAND_DATA:     return "OPERAND_DATA";
+    default:               return NULL;
+    }
+}
+
+Opcode_Info opcode_matrix[UINT8_MAX + 1] = {
+    //-0                  -1          -2            -3              -4         -5         -6                 -7           -8          -9           -A              -B          -C          -D          -E          -F
+    {BRK, IMPL},  {ORA, INDX},        {0x00},        {0x00},        {0x00}, {ORA, ZP} ,  {ASL, ZP},      {0x00},  {PHP, IMPL}, {ORA, IMME},   {ASL, ACCU},        {0x00},      {0x00},  {ORA, ABS},   {ASL, ABS},    {0x00}, // 0-
+    {BPL, REL} ,  {ORA, INDY},        {0x00},        {0x00},        {0x00}, {ORA, ZPX}, {ASL, ZPX},      {0x00},  {CLC, IMPL}, {ORA, ABSY},        {0x00},        {0x00},      {0x00}, {ORA, ABSX},  {ASL, ABSX},    {0x00}, // 1-
+    {JSR, ABS} ,  {AND, INDX},        {0x00},        {0x00},     {BIT, ZP}, {AND, ZP} ,  {ROL, ZP},      {0x00},  {PLP, IMPL}, {AND, IMME},   {ROL, ACCU},        {0x00},  {BIT, ABS},  {AND, ABS},   {ROL, ABS},    {0x00}, // 2-
+    {BMI, REL} ,  {AND, INDY},        {0x00},        {0x00},        {0x00}, {AND, ZPX}, {ROL, ZPX},      {0x00},  {SEC, IMPL}, {AND, ABSY},        {0x00},        {0x00},      {0x00}, {AND, ABSX},  {ROL, ABSX},    {0x00}, // 3-
+    {RTI, IMPL},  {EOR, INDX},        {0x00},        {0x00},        {0x00}, {EOR, ZP} ,  {LSR, ZP},      {0x00},  {PHA, IMPL}, {EOR, IMME},    {LSR, ABS},        {0x00},  {JMP, ABS},  {EOR, ABS},   {LSR, ABS},    {0x00}, // 4-
+    {BVC, REL} ,  {EOR, INDY},        {0x00},        {0x00},        {0x00}, {EOR, ZPX}, {LSR, ZPX},      {0x00},  {CLI, IMPL}, {EOR, ABSY},        {0x00},        {0x00},      {0x00}, {EOR, ABSX},  {LSR, ABSX},    {0x00}, // 5-
+    {RTS, IMPL},  {ADC, INDX},        {0x00},        {0x00},        {0x00}, {ADC, ZP} ,  {ROR, ZP},      {0x00},  {PLA, IMPL}, {ADC, IMME},   {ROR, ACCU},        {0x00},  {JMP, IND},  {ADC, ABS},   {ROR, ABS},    {0x00}, // 6-
+    {BVS, REL} ,  {ADC, INDY},        {0x00},        {0x00},        {0x00}, {ADC, ZPX}, {ROR, ZPX},      {0x00},  {SEI, IMPL}, {ADC, ABSY},        {0x00},        {0x00},      {0x00}, {ADC, ABSX},  {ROR, ABSX},    {0x00}, // 7-
+         {0x00},  {STA, INDX},        {0x00},        {0x00},     {STY, ZP}, {STA, ZP} ,  {STX, ZP},      {0x00},  {DEY, IMPL},      {0x00},   {TXA, IMPL},        {0x00},  {STY, ABS},  {STA, ABS},   {STX, ABS},    {0x00}, // 8-
+    {BCC, REL} ,  {STA, INDY},        {0x00},        {0x00},    {STY, ZPX}, {STA, ZPX}, {STX, ZPY},      {0x00},  {TYA, IMPL}, {STA, ABSY},   {TXS, IMPL},        {0x00},      {0x00}, {STA, ABSX},       {0x00},    {0x00}, // 9-
+    {LDY, IMME},  {LDA, INDX},   {LDX, IMME},        {0x00},     {LDY, ZP}, {LDA, ZP} ,  {LDX, ZP},      {0x00},  {TAY, IMPL}, {LDA, IMME},   {TAX, IMPL},        {0x00},  {LDY, ABS},  {LDA, ABS},   {LDX, ABS},    {0x00}, // A-
+    {BCS, REL} ,  {LDA, INDY},        {0x00},        {0x00},    {LDY, ZPX}, {LDA, ZPX}, {LDX, ZPY},      {0x00},  {CLV, IMPL}, {LDA, ABSY},   {TSX, IMPL},        {0x00}, {LDY, ABSX}, {LDA, ABSX},  {LDX, ABSY},    {0x00}, // B-
+    {CPY, IMME},  {CMP, INDX},        {0x00},        {0x00},     {CPY, ZP}, {CMP, ZP} ,  {DEC, ZP},      {0x00},  {INY, IMPL}, {CMP, IMME},   {DEX, IMPL},        {0x00},  {CPY, ABS},  {CMP, ABS},   {DEC, ABS},    {0x00}, // C-
+    {BNE, REL} ,  {CMP, INDY},        {0x00},        {0x00},        {0x00}, {CMP, ZPX}, {DEC, ZPX},      {0x00},  {CLD, IMPL}, {CMP, ABSY},        {0x00},        {0x00},      {0x00}, {CMP, ABSX},  {DEC, ABSX},    {0x00}, // D-
+    {CPX, IMME},  {SBC, INDX},        {0x00},        {0x00},     {CPX, ZP}, {SBC, ZP} ,  {INC, ZP},      {0x00},  {INX, IMPL}, {SBC, IMME},   {NOP, IMPL},        {0x00},  {CPX, ABS},  {SBC, ABS},   {INC, ABS},    {0x00}, // E-
+    {BEQ, REL} ,  {SBC, INDY},        {0x00},        {0x00},        {0x00}, {SBC, ZPX}, {INC, ZPX},      {0x00},  {SED, IMPL}, {SBC, ABSY},        {0x00},        {0x00},      {0x00}, {SBC, ABSX},  {INC, ABSX},    {0x00}, // F-
+};

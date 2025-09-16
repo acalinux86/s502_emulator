@@ -207,32 +207,40 @@ const char *mos_operand_type_as_cstr(Operand_Type type);
 
 #define MOS_ARRAY_LEN(xs) (sizeof(xs) / sizeof(xs[0]))
 
-#define MOS_UNIMPLEMENTED(message)                                          \
-    do {                                                                \
-        fprintf(stderr, "[ERROR]: %s not implemented yet!!!\n", message) ;  \
-        abort();                                                        \
+
+#define MOS_ASSERT(condition, message)                      \
+    do {                                                    \
+        if (!(condition)) {                                 \
+            fprintf(stderr, "[CPU FAULT]: %s\n", message);  \
+        }                                                   \
+    } while(0)
+
+#define MOS_UNIMPLEMENTED(message)                                         \
+    do {                                                                   \
+        fprintf(stderr, "[ERROR]: %s not implemented yet!!!\n", message);  \
+        abort();                                                           \
     } while (0)
 
 #define MOS_UNREACHABLE(message)                                        \
-    do {                                                            \
-        fprintf(stderr, "[ERROR]: `%s` unreachable!!!!\n", message);  \
-        abort();                                                    \
+    do {                                                                \
+        fprintf(stderr, "[ERROR]: `%s` unreachable!!!!\n", message);    \
+        abort();                                                        \
     } while (0)
 
 #define MOS_ILLEGAL_ADDRESSING(mode, opcode)                    \
-    do {                                                    \
-        fprintf(stderr, "[ERROR]: Invalid `%s` mode on %s\n", \
-                mos_addr_mode_as_cstr(mode),               \
-                mos_opcode_as_cstr(opcode));               \
-        abort();                                            \
+    do {                                                        \
+        fprintf(stderr, "[ERROR]: Invalid `%s` mode on %s\n",   \
+                mos_addr_mode_as_cstr(mode),                    \
+                mos_opcode_as_cstr(opcode));                    \
+        abort();                                                \
     } while (0)
 
-#define MOS_ILLEGAL_ACCESS(mode, operand)                                   \
+#define MOS_ILLEGAL_ACCESS(mode, operand)                               \
     do {                                                                \
-        assert(mos_operand_type_as_cstr(operand));                     \
-        fprintf(stderr, "[ERROR]: Invalid `%s` type on `%s` mode. \n",    \
-                mos_operand_type_as_cstr(operand),                     \
-                mos_addr_mode_as_cstr(mode));                          \
+        assert(mos_operand_type_as_cstr(operand));                      \
+        fprintf(stderr, "[ERROR]: Invalid `%s` type on `%s` mode. \n",  \
+                mos_operand_type_as_cstr(operand),                      \
+                mos_addr_mode_as_cstr(mode));                           \
         abort();                                                        \
     } while (0)
 
