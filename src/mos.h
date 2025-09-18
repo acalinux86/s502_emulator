@@ -41,7 +41,7 @@ typedef struct {
     MMap_Entries entries;
 } CPU;
 
-typedef enum {
+typedef enum _status_flags {
     N_BIT_FLAG = 0x80, // Negative bit flag
     V_BIT_FLAG = 0x40, // Overflow bit flag
     U_BIT_FLAG = 0x20, // UNSET BIT, intialized with the PSR

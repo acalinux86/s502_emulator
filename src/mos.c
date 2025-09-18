@@ -602,11 +602,31 @@ void mos_increment(CPU *cpu, Instruction instruction)
     if (data & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void mos_rotate_left(CPU *cpu, uint8_t *data)
+void mos_arithmetic_shift_left(CPU *cpu, uint8_t *data)
 {
     uint8_t result = *data << 1; // mult
     mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
-    mos_set_psr_flags(cpu, (cpu->psr >> N_BIT_FLAG) & 1); // Set to the contents of old bit 7 (neg bit)
+    if (*data & N_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 7 (neg bit)
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    *data = result;
+}
+
+void mos_logical_shift_right(CPU *cpu, uint8_t *data)
+{
+    uint8_t result = *data >> 1; // div
+    mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
+    mos_set_psr_flags(cpu, (cpu->psr >> C_BIT_FLAG) & 1); // Set to the contents of old bit 0 (carry bit)
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    *data = result;
+}
+
+void mos_rotate_left(CPU *cpu, uint8_t *data)
+{
+    uint8_t result = *data << 1;
+    mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
+    mos_set_psr_flags(cpu, (cpu->psr >> 7) & 1); // Set to the contents of old bit 7 (neg bit)
     if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
     if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
     *data = result;
@@ -614,7 +634,7 @@ void mos_rotate_left(CPU *cpu, uint8_t *data)
 
 void mos_rotate_right(CPU *cpu, uint8_t *data)
 {
-    uint8_t result = *data >> 1; // div
+    uint8_t result = *data >> 1;
     mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
     mos_set_psr_flags(cpu, (cpu->psr >> C_BIT_FLAG) & 1); // Set to the contents of old bit 0 (carry bit)
     if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
