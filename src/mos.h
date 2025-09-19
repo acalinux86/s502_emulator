@@ -27,7 +27,7 @@ typedef struct {
     bool readonly;
 } MOS_MMap; // Memory Map
 
-typedef ARRAY(MOS_MMap) Entries;
+typedef ARRAY(MOS_MMap) MOS_MMaps;
 
 typedef struct {
     uint8_t  regx; // Reg x
@@ -36,7 +36,7 @@ typedef struct {
     uint8_t  sp;   // Stack pointer
     uint16_t pc;   // Program Counter
     uint8_t  psr;  // Process Status Reg
-    Entries entries;
+    MOS_MMaps entries;
 } MOS_Cpu;
 
 typedef enum _status_flags {
@@ -48,7 +48,7 @@ typedef enum _status_flags {
     I_BIT_FLAG = 0x04, // Interrupt disable bit flag
     Z_BIT_FLAG = 0x02, // Zero bit flag
     C_BIT_FLAG = 0x01, // Carry bit flag
-} Status_Flags;
+} MOS_StatusFlags;
 
 typedef enum {
     IMPL, // IMPLICIT | IMPLIED
@@ -232,15 +232,15 @@ const char *mos_operand_type_as_cstr(MOS_OperandType type);
 MOS_Cpu mos_cpu_init(void);
 
 uint8_t mos_read_memory(void *device, uint16_t location);
-void    mos_write_memory(void *device, uint16_t location, uint8_t data);
 uint8_t mos_cpu_read(MOS_Cpu *cpu, uint16_t addr);
-void    mos_cpu_write(MOS_Cpu *cpu, uint16_t addr, uint8_t data);
+void mos_write_memory(void *device, uint16_t location, uint8_t data);
+void mos_cpu_write(MOS_Cpu *cpu, uint16_t addr, uint8_t data);
 
-void    mos_push_stack(MOS_Cpu *cpu, uint8_t value);
+void mos_push_stack(MOS_Cpu *cpu, uint8_t value);
 uint8_t mos_pull_stack(MOS_Cpu *cpu);
 
-void mos_set_psr_flags(MOS_Cpu *cpu, Status_Flags flags);
-void mos_clear_psr_flags(MOS_Cpu *cpu, Status_Flags flags);
+void mos_set_psr_flags(MOS_Cpu *cpu, MOS_StatusFlags flags);
+void mos_clear_psr_flags(MOS_Cpu *cpu, MOS_StatusFlags flags);
 
 uint8_t  mos_fetch_operand_data(MOS_Cpu *cpu, MOS_AddressingModes mode, MOS_Operand operand);
 uint16_t mos_fetch_operand_location(MOS_Cpu *cpu, MOS_AddressingModes mode, MOS_Operand operand);
@@ -265,15 +265,30 @@ void mos_logical_xor(MOS_Cpu *cpu, MOS_Instruction instruction);
 void mos_logical_or(MOS_Cpu *cpu, MOS_Instruction instruction);
 void mos_bit_test(MOS_Cpu *cpu, MOS_Instruction instruction);
 
-void mos_branch_flag_clear(MOS_Cpu *cpu, MOS_Instruction instruction, Status_Flags flag);
-void mos_branch_flag_set(MOS_Cpu *cpu, MOS_Instruction instruction, Status_Flags flag);
+void mos_branch_flag_clear(MOS_Cpu *cpu, MOS_Instruction instruction, MOS_StatusFlags flag);
+void mos_branch_flag_set(MOS_Cpu *cpu, MOS_Instruction instruction, MOS_StatusFlags flag);
+
+void mos_decrement(MOS_Cpu *cpu, MOS_Instruction instruction);
+void mos_increment(MOS_Cpu *cpu, MOS_Instruction instruction);
+void mos_decrement_regx(MOS_Cpu *cpu);
+void mos_decrement_regy(MOS_Cpu *cpu);
+void mos_increment_regx(MOS_Cpu *cpu);
+void mos_increment_regy(MOS_Cpu *cpu);
+
+void mos_arithmetic_shift_left_racc(MOS_Cpu *cpu);
+void mos_logical_shift_right_racc(MOS_Cpu *cpu);
+void mos_rotate_left_racc(MOS_Cpu *cpu);
+void mos_rotate_right_racc(MOS_Cpu *cpu);
+
+void mos_arithmetic_shift_left_memory(MOS_Cpu *cpu, MOS_Instruction instruction);
+void mos_logical_shift_right_memory(MOS_Cpu *cpu, MOS_Instruction instruction);
+void mos_rotate_left_memory(MOS_Cpu *cpu, MOS_Instruction instruction);
+void mos_rotate_right_memory(MOS_Cpu *cpu, MOS_Instruction instruction);
 
 void mos_break(MOS_Cpu *cpu);
 bool mos_decode(MOS_Cpu *cpu, MOS_Instruction instruction);
 
-
-// Helper functions
-void     mos_uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte);
+void mos_uint16_t_to_bytes(uint16_t sixteen_bit, uint8_t *high_byte, uint8_t *low_byte);
 uint16_t mos_bytes_to_uint16_t(uint8_t a, uint8_t b);
 
 #endif // MOS_6502_EMULATOR_H_

@@ -82,13 +82,13 @@ uint8_t mos_pull_stack(MOS_Cpu *cpu)
 }
 
 // NOTE: Set PSR FLAGS
-void mos_set_psr_flags(MOS_Cpu *cpu, Status_Flags flags)
+void mos_set_psr_flags(MOS_Cpu *cpu, MOS_StatusFlags flags)
 {
     cpu->psr |= flags;
 }
 
 // NOTE: Clear PSR FLAGS
-void mos_clear_psr_flags(MOS_Cpu *cpu, Status_Flags flags)
+void mos_clear_psr_flags(MOS_Cpu *cpu, MOS_StatusFlags flags)
 {
     cpu->psr &= (~flags);
 }
@@ -259,8 +259,17 @@ uint8_t mos_fetch_operand_data(MOS_Cpu *cpu, MOS_AddressingModes mode, MOS_Opera
         }
     } break;
 
+    case ACCU: {
+        switch (operand.type) {
+        case OPERAND_DATA: {
+            return cpu->racc;
+        } break;
+        case OPERAND_ADDRESS:
+        default: MOS_ILLEGAL_ACCESS(mode, operand.type);
+        }
+    } break;
+
     case IMPL:
-    case ACCU:
     case ZPY:
     case IND:
     default:
@@ -515,7 +524,7 @@ void mos_bit_test(MOS_Cpu *cpu, MOS_Instruction instruction)
     if (data & V_BIT_FLAG) mos_set_psr_flags(cpu, V_BIT_FLAG);
 }
 
-void mos_branch_flag_clear(MOS_Cpu *cpu, MOS_Instruction instruction, Status_Flags flag)
+void mos_branch_flag_clear(MOS_Cpu *cpu, MOS_Instruction instruction, MOS_StatusFlags flag)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     if (cpu->psr & flag) {
@@ -523,7 +532,7 @@ void mos_branch_flag_clear(MOS_Cpu *cpu, MOS_Instruction instruction, Status_Fla
     }
 }
 
-void mos_branch_flag_set(MOS_Cpu *cpu, MOS_Instruction instruction, Status_Flags flag)
+void mos_branch_flag_set(MOS_Cpu *cpu, MOS_Instruction instruction, MOS_StatusFlags flag)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     if (!(cpu->psr & flag)) {
