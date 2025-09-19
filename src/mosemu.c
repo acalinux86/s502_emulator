@@ -9,13 +9,13 @@
 
 #include "./mos.h"
 
-Instruction mos_fetch_instruction(CPU *cpu)
+MOS_Instruction mos_fetch_instruction(MOS_Cpu *cpu)
 {
-    Instruction inst = {0};
+    MOS_Instruction inst = {0};
     uint8_t data = mos_cpu_read(cpu, cpu->pc);
     cpu->pc++;
 
-    Opcode_Info info = opcode_matrix[data];
+    MOS_OpcodeInfo info = opcode_matrix[data];
     inst.opcode = info.opcode;
     inst.mode   = info.mode;
     switch (inst.mode) {
@@ -42,8 +42,8 @@ Instruction mos_fetch_instruction(CPU *cpu)
         uint8_t page = mos_cpu_read(cpu, cpu->pc);
         cpu->pc++;
         uint16_t abs = mos_bytes_to_uint16_t(page, offset);
-        inst.operand.data.address.absolute = abs;
-        inst.operand.type = OPERAND_ABSOLUTE;
+        inst.operand.data.address = abs;
+        inst.operand.type = OPERAND_ADDRESS;
     } break;
     case ABSX:
     case ABSY:
@@ -74,28 +74,18 @@ int main(void)
     array_append(&instructions, 0x01);
     array_append(&instructions, 0x00);
 
+    array_append(&instructions, 0x0A); // ASL, A
+
     array_append(&instructions, 0x8D); // STA
-    array_append(&instructions, 0x02);
-    array_append(&instructions, 0x00);
-
-    array_append(&instructions, 0xCE); // DEC
-    array_append(&instructions, 0x02);
-    array_append(&instructions, 0x00);
-
-    array_append(&instructions, 0xEE); // INC
-    array_append(&instructions, 0x02);
-    array_append(&instructions, 0x00);
-
-    array_append(&instructions, 0xEE); // INC
     array_append(&instructions, 0x02);
     array_append(&instructions, 0x00);
 
     array_append(&instructions, 0x00); // BRK
 
-    CPU cpu = mos_cpu_init();
+    MOS_Cpu cpu = mos_cpu_init();
     uint8_t system_ram[0xFFFF] = {0};
 
-    MMap_Entry ram = {
+    MOS_MMap ram = {
         .device = system_ram,
         .read = mos_read_memory,
         .write = mos_write_memory,
@@ -116,7 +106,7 @@ int main(void)
     cpu.pc = addr;
     printf("PC: 0x%02X\n", cpu.pc);
     while (1) {
-        Instruction inst = mos_fetch_instruction(&cpu);
+        MOS_Instruction inst = mos_fetch_instruction(&cpu);
         if (!mos_decode(&cpu, inst)) return 1;
         if (inst.opcode == BRK) break;
     }
