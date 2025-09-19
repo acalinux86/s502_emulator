@@ -1,9 +1,17 @@
-## Binary Representation of Decimal
-- Two's Complement - https://www.youtube.com/watch?v=4qH4unVtJkE
-- Two's Complement - https://www.youtube.com/watch?v=m_G3z-C1C2g
-- BCD (Binary Coded Decimal) - https://www.youtube.com/watch?v=ZuUAm6JN4Go
+# MOS 6502 Emulator
 
-## Additional Resources
+Implementing Mos 6502 emulator from scratch in pure C
+
+> [!WARNING]
+> The emulator is not fully finished yet.
+
+## Usage
+``` bash
+$ make
+./build/mosemu
+```
+
+## Resources
 - 6502 Register Overview - https://imgur.com/1fsydip
 - 6502 CPU DataSheet - https://www.princeton.edu/~mae412/HANDOUTS/Datasheets/6502.pdf
 - Program counter - https://www.youtube.com/watch?v=ccf9ngGIb8c
