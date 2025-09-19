@@ -55,32 +55,24 @@ MOS_Instruction mos_fetch_instruction(MOS_Cpu *cpu)
     return inst;
 }
 
-typedef ARRAY(uint8_t) U8s;
-
 int main(void)
 {
-    U8s instructions = {0};
-
-    array_append(&instructions, 0x18); // CLC
-
-    array_append(&instructions, 0xA9); // LDA
-    array_append(&instructions, 0x00);
-
-    array_append(&instructions, 0x6D); // ADC
-    array_append(&instructions, 0x00);
-    array_append(&instructions, 0x00);
-
-    array_append(&instructions, 0x6D); // ADC
-    array_append(&instructions, 0x01);
-    array_append(&instructions, 0x00);
-
-    array_append(&instructions, 0x0A); // ASL, A
-
-    array_append(&instructions, 0x8D); // STA
-    array_append(&instructions, 0x02);
-    array_append(&instructions, 0x00);
-
-    array_append(&instructions, 0x00); // BRK
+    uint8_t instructions[] = {
+        0x18, // CLC
+        0xA9, // LDA
+        0x00,
+        0x6D, // ADC
+        0x00,
+        0x00,
+        0x6D, // ADC
+        0x01,
+        0x00,
+        0x0A, // ASL, A
+        0x8D, // STA
+        0x02,
+        0x00,
+        0x00, // BRK
+    };
 
     MOS_Cpu cpu = mos_cpu_init();
     uint8_t system_ram[0xFFFF] = {0};
@@ -99,9 +91,9 @@ int main(void)
     mos_cpu_write(&cpu, mos_bytes_to_uint16_t(0x00, 0x01), 0xA);
 
     uint16_t addr = mos_bytes_to_uint16_t(0x01, 0xB);
-    for (uint32_t i = 0; i < instructions.count; ++i) {
-        mos_cpu_write(&cpu, addr + i, instructions.items[i]);
-        printf("Inst: 0x%02X\n", instructions.items[i]);
+    for (uint32_t i = 0; i < MOS_ARRAY_LEN(instructions); ++i) {
+        mos_cpu_write(&cpu, addr + i, instructions[i]);
+        printf("Inst: 0x%02X\n", instructions[i]);
     }
     cpu.pc = addr;
     printf("PC: 0x%02X\n", cpu.pc);
@@ -110,7 +102,13 @@ int main(void)
         if (!mos_decode(&cpu, inst)) return 1;
         if (inst.opcode == BRK) break;
     }
-    printf("Result: 0X%X\n", mos_cpu_read(&cpu, mos_bytes_to_uint16_t(0x00, 0x02)));
-    printf("PC: 0x%02X\n", cpu.pc);
+
+    uint8_t dat = mos_cpu_read(&cpu, mos_bytes_to_uint16_t(0x00, 0x02));
+    printf("Result: 0X%X\n", dat);
+
+    uint16_t pc = cpu.pc;
+    printf("PC: 0x%02X\n", pc);
+
+    array_delete(&cpu.entries);
     return 0;
 }
