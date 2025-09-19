@@ -12,50 +12,34 @@ uint16_t mos_bytes_to_uint16_t(uint8_t a, uint8_t b)
     return (a << 8) | b;
 }
 
-Location mos_uint16_t_to_loc(uint16_t sixteen_bit)
-{
-    uint8_t high_byte, low_byte;
-    mos_uint16_t_to_bytes(sixteen_bit, &high_byte, &low_byte);
-    Location loc = {
-        .page = high_byte, // higher byte
-        .offset = low_byte, // low-byte
-    };
-    return loc;
-}
-
-uint16_t mos_loc_to_uint16_t(Location loc)
-{
-    return mos_bytes_to_uint16_t(loc.page, loc.offset);
-}
-
 // DEBUG:
-CPU mos_cpu_init(void)
+MOS_Cpu mos_cpu_init(void)
 {
-    CPU cpu = {0};
+    MOS_Cpu cpu = {0};
     cpu.regx = 0; cpu.regy = 0; cpu.racc = 0;
     cpu.pc = 0;   cpu.psr = U_BIT_FLAG; cpu.sp = 0xFF;
     array_new(&cpu.entries);
     return cpu;
 }
 
-uint8_t mos_read_memory(void *device, Location location)
+uint8_t mos_read_memory(void *device, uint16_t location)
 {
     uint8_t *ram = (uint8_t*)device;
-    return ram[mos_bytes_to_uint16_t(location.page, location.offset)];
+    return ram[location];
 }
 
-void mos_write_memory(void *device, Location location, uint8_t data)
+void mos_write_memory(void *device, uint16_t location, uint8_t data)
 {
     uint8_t *ram = (uint8_t*) device;
-    ram[mos_bytes_to_uint16_t(location.page, location.offset)] = data;
+    ram[location] = data;
 }
 
-uint8_t mos_cpu_read(CPU *cpu, uint16_t addr)
+uint8_t mos_cpu_read(MOS_Cpu *cpu, uint16_t addr)
 {
     for (uint8_t i = 0; i < cpu->entries.count; ++i) {
-        MMap_Entry *entry = &cpu->entries.items[i];
+        MOS_MMap *entry = &cpu->entries.items[i];
         if (addr >= entry->start_addr && addr <= entry->end_addr) {
-            return entry->read(entry->device, mos_uint16_t_to_loc(addr));
+            return entry->read(entry->device, addr);
         }
     }
 
@@ -63,48 +47,106 @@ uint8_t mos_cpu_read(CPU *cpu, uint16_t addr)
     return 0;
 }
 
-void mos_cpu_write(CPU *cpu, uint16_t addr, uint8_t data)
+void mos_cpu_write(MOS_Cpu *cpu, uint16_t addr, uint8_t data)
 {
     for (uint8_t i = 0; i < cpu->entries.count; ++i) {
-        MMap_Entry *entry = &cpu->entries.items[i];
+        MOS_MMap *entry = &cpu->entries.items[i];
         if (!entry->readonly) {
             if (addr >= entry->start_addr && addr <= entry->end_addr) {
-                entry->write(entry->device, mos_uint16_t_to_loc(addr), data);
+                entry->write(entry->device, addr, data);
+                return; // successful write, return early
+            } else {
+                fprintf(stderr, "ERROR: Address Written to Unmapped Memory: 0x%04x\n", addr);
+                exit(1);
             }
         } else {
-            fprintf(stderr, "CPU FAULT: Memory Readonly\n");
+            fprintf(stderr, "MOS_Cpu FAULT: Memory Readonly\n");
             exit(1);
         }
     }
+    fprintf(stderr, "ERROR: Address Written to Unmapped Memory: 0x%04x\n", addr);
+    exit(1);
 }
 
-void mos_push_stack(CPU *cpu, uint8_t value)
+void mos_push_stack(MOS_Cpu *cpu, uint8_t value)
 {
     // NOTE: Stack Operations are limited to only page one (Stack Pointer) of the 6502
     mos_cpu_write(cpu, mos_bytes_to_uint16_t(MOS_STACK_PAGE, cpu->sp), value);
     cpu->sp--;
 }
 
-uint8_t mos_pull_stack(CPU *cpu)
+uint8_t mos_pull_stack(MOS_Cpu *cpu)
 {
     cpu->sp++;
     return mos_cpu_read(cpu, mos_bytes_to_uint16_t(MOS_STACK_PAGE, cpu->sp));
 }
 
 // NOTE: Set PSR FLAGS
-void mos_set_psr_flags(CPU *cpu, Status_Flags flags)
+void mos_set_psr_flags(MOS_Cpu *cpu, Status_Flags flags)
 {
     cpu->psr |= flags;
 }
 
 // NOTE: Clear PSR FLAGS
-void mos_clear_psr_flags(CPU *cpu, Status_Flags flags)
+void mos_clear_psr_flags(MOS_Cpu *cpu, Status_Flags flags)
 {
     cpu->psr &= (~flags);
 }
 
+uint16_t mos_zero_page(uint16_t location)
+{
+    uint8_t high_byte, low_byte;
+    mos_uint16_t_to_bytes(location, &high_byte, &low_byte);
+    MOS_ASSERT(high_byte == 0x00, "Invalid Page Zero Address");
+    return location;
+}
+
+uint16_t mos_zero_page_x(MOS_Cpu *cpu, uint16_t location)
+{
+    uint8_t high_byte, low_byte;
+    mos_uint16_t_to_bytes(location, &high_byte, &low_byte);
+    MOS_ASSERT(high_byte == 0x00 , "Invalid Page Zero Address");
+    return mos_bytes_to_uint16_t(high_byte, low_byte + cpu->regx);
+}
+
+uint16_t mos_absolute_x(MOS_Cpu *cpu, uint16_t location)
+{
+    return location + cpu->regx;
+}
+
+uint16_t mos_absolute_y(MOS_Cpu *cpu, uint16_t location)
+{
+    return location + cpu->regy;
+}
+
+uint16_t mos_indirect_x(MOS_Cpu *cpu, uint16_t location)
+{
+    uint8_t high_byte, low_byte;
+    mos_uint16_t_to_bytes(location, &high_byte, &low_byte);
+
+    uint16_t new_loc = mos_bytes_to_uint16_t(high_byte , low_byte + cpu->regx);
+    mos_uint16_t_to_bytes(new_loc, &high_byte, &low_byte);
+
+    uint16_t new_loc_i = mos_bytes_to_uint16_t(high_byte , low_byte + 1);
+
+    // fetch low-byte from new_loc, fetch high-byte from new_loc + 1
+    return mos_bytes_to_uint16_t(mos_cpu_read(cpu, new_loc_i), mos_cpu_read(cpu, new_loc));
+}
+
+uint16_t mos_indirect_y(MOS_Cpu *cpu, uint16_t location)
+{
+    uint8_t high_byte, low_byte;
+    mos_uint16_t_to_bytes(location, &high_byte, &low_byte);
+
+    uint16_t new_loc = mos_bytes_to_uint16_t(high_byte , low_byte + 1);
+    uint8_t offset = mos_cpu_read(cpu, location);   // fetch low-byte from location
+    uint8_t page =   mos_cpu_read(cpu, new_loc); // fetch high-byte from location + 1
+    uint16_t base_addr = mos_bytes_to_uint16_t(page, offset);
+    return base_addr + cpu->regy; // final address
+}
+
 // Returns data for read opcodes
-uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
+uint8_t mos_fetch_operand_data(MOS_Cpu *cpu, MOS_AddressingModes mode, MOS_Operand operand)
 {
     switch (mode) {
     case IMME: {
@@ -113,21 +155,18 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
         case OPERAND_DATA: {
             return operand.data.data;
         }
-        case OPERAND_ABSOLUTE:
-        case OPERAND_LOCATION:
+        case OPERAND_ADDRESS:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
     case ZP: {
         switch (operand.type) {
-        case OPERAND_LOCATION: {
+        case OPERAND_ADDRESS: {
             // if the operand doesn't contain any page, assumed that it is page zero
-            Location location = operand.data.address.loc;
-            MOS_ASSERT(location.page == 0x00, "Invalid Page Zero Address");
-            return mos_cpu_read(cpu, mos_loc_to_uint16_t(location));
+            uint16_t location = mos_zero_page(operand.data.address);
+            return mos_cpu_read(cpu, location);
         }
-        case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
@@ -137,13 +176,10 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
         // zero page X modes sums x reg to the zero page operand and uses it as index
         // It wraps around incase it exceeds page MOS_MAX_OFFSET
         switch (operand.type) {
-        case OPERAND_LOCATION: {
-            Location location = operand.data.address.loc;
-            MOS_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
-            Location new_loc = { .offset = location.offset + cpu->regx, .page = location.page};
-            return mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc));
+        case OPERAND_ADDRESS: {
+            uint16_t new_loc = mos_zero_page_x(cpu, operand.data.address);
+            return mos_cpu_read(cpu, new_loc);
         }
-        case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
@@ -152,13 +188,10 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
     case ABS: {
         // uses the absolute location in operand to load access memory into accumulator
         switch (operand.type) {
-        case OPERAND_ABSOLUTE: {
-            Absolute absolute = operand.data.address.absolute;
-            Location location = mos_uint16_t_to_loc(absolute);
-            return mos_cpu_read(cpu, mos_loc_to_uint16_t(location));
+        case OPERAND_ADDRESS: {
+            return mos_cpu_read(cpu, operand.data.address);
         }
         case OPERAND_DATA:
-        case OPERAND_LOCATION:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -166,14 +199,11 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
     case ABSX: {
         // absolute but += X reg
         switch (operand.type) {
-        case OPERAND_ABSOLUTE: {
-            Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + cpu->regx;
-            Location location = mos_uint16_t_to_loc(index);
-            return mos_cpu_read(cpu, mos_loc_to_uint16_t(location));
+        case OPERAND_ADDRESS: {
+            uint16_t index = mos_absolute_x(cpu, operand.data.address);
+            return mos_cpu_read(cpu, index);
         }
         case OPERAND_DATA:
-        case OPERAND_LOCATION:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -181,14 +211,11 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
     case ABSY: {
         // absolute but += Y reg
         switch (operand.type) {
-        case OPERAND_ABSOLUTE: {
-            Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + cpu->regy;
-            Location location = mos_uint16_t_to_loc(index);
-            return mos_cpu_read(cpu, mos_loc_to_uint16_t(location));
+        case OPERAND_ADDRESS: {
+            uint16_t index = mos_absolute_y(cpu, operand.data.address);
+            return mos_cpu_read(cpu, index);
         }
         case OPERAND_DATA:
-        case OPERAND_LOCATION:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -199,18 +226,10 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
         // Uses that data as a new location to index into memory and fetches low-byte
         // Uses the modified location.offset + 1 to index into memory and fetches high-byte
         switch (operand.type) {
-        case OPERAND_LOCATION: {
-            Location location = operand.data.address.loc;
-            MOS_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
-            Location new_loc   = {.offset = location.offset + cpu->regx, .page = location.page};
-            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
-            Location final = {
-                .offset = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
-                .page =   mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
-            };
-            return mos_cpu_read(cpu, mos_loc_to_uint16_t(final));
+        case OPERAND_ADDRESS: {
+            uint16_t final = mos_indirect_x(cpu, operand.data.address);
+            return mos_cpu_read(cpu, final);
         }
-        case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
@@ -219,18 +238,10 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
     case INDY: {
         // same as index indirect but the addition of the Y reg occurs in the final address
         switch (operand.type) {
-        case OPERAND_LOCATION: {
-            Location location = operand.data.address.loc;
-            MOS_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
-            Location new_loc   = {.offset = location.offset    , .page = location.page};
-            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
-            uint8_t offset = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc));   // fetch low-byte from new_loc
-            uint8_t page =   mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc_i)); // fetch high-byte from new_loc + 1
-            uint16_t base_addr = mos_bytes_to_uint16_t(page, offset);
-            uint16_t final = base_addr + cpu->regy;
-            return mos_cpu_read(cpu, final);
+        case OPERAND_ADDRESS: {
+            uint16_t final_location = mos_indirect_y(cpu, operand.data.address);
+            return mos_cpu_read(cpu, final_location);
         }
-        case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
@@ -243,8 +254,7 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
             // with which to be added to the PC
             return operand.data.data;
         } break;
-        case OPERAND_ABSOLUTE:
-        case OPERAND_LOCATION:
+        case OPERAND_ADDRESS:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -259,17 +269,16 @@ uint8_t mos_fetch_operand_data(CPU *cpu, Addressing_Modes mode, Operand operand)
     MOS_UNREACHABLE("mos_fetch_operand_data");
 }
 
-// Returns A Location for store opcodes
-Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand operand)
+// Returns A MOS_Location for store opcodes
+uint16_t mos_fetch_operand_location(MOS_Cpu *cpu, MOS_AddressingModes mode, MOS_Operand operand)
 {
     switch (mode) {
     case ZP: {
         switch (operand.type) {
-        case OPERAND_LOCATION: {
+        case OPERAND_ADDRESS: {
             // if the operand doesn't contain any page, assumed that it is page zero
-            return operand.data.address.loc;
+            return operand.data.address;
         }
-        case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
@@ -279,26 +288,21 @@ Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand ope
         // zero page X modes sums x reg to the zero page operand and uses it as index
         // It wraps around incase it exceeds page MOS_MAX_OFFSET
         switch (operand.type) {
-        case OPERAND_LOCATION: {
-            Location location = operand.data.address.loc;
-            MOS_ASSERT(location.page == 0x00 , "Invalid Page Zero Address");
-            return (Location) { .offset = location.offset + cpu->regx, .page = location.page};
+        case OPERAND_ADDRESS: {
+            return mos_zero_page_x(cpu, operand.data.address);
         }
-        case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
 
     case ABS: {
-        // uses the absolute location in operand to load access memory into accumulator
+        // uses the absolute location in operand to load memory into accumulator
         switch (operand.type) {
-        case OPERAND_ABSOLUTE: {
-            Absolute absolute = operand.data.address.absolute;
-            return mos_uint16_t_to_loc(absolute);
+        case OPERAND_ADDRESS: {
+            return operand.data.address;
         }
         case OPERAND_DATA:
-        case OPERAND_LOCATION:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -306,13 +310,10 @@ Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand ope
     case ABSX: {
         // absolute but += X reg
         switch (operand.type) {
-        case OPERAND_ABSOLUTE: {
-            Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + cpu->regx;
-            return mos_uint16_t_to_loc(index);
+        case OPERAND_ADDRESS: {
+            return mos_absolute_x(cpu, operand.data.address);
         }
         case OPERAND_DATA:
-        case OPERAND_LOCATION:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -320,13 +321,10 @@ Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand ope
     case ABSY: {
         // absolute but += Y reg
         switch (operand.type) {
-        case OPERAND_ABSOLUTE: {
-            Absolute absolute = operand.data.address.absolute;
-            Absolute index = absolute + cpu->regy;
-            return mos_uint16_t_to_loc(index);
+        case OPERAND_ADDRESS: {
+            return mos_absolute_y(cpu, operand.data.address);
         }
         case OPERAND_DATA:
-        case OPERAND_LOCATION:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
     } break;
@@ -337,17 +335,9 @@ Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand ope
         // Uses that data as a new location to index into memory and fetches low-byte
         // Uses the modified location.offset + 1 to index into memory and fetches high-byte
         switch (operand.type) {
-        case OPERAND_LOCATION: {
-            Location location = operand.data.address.loc;
-            MOS_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
-            Location new_loc   = {.offset = location.offset + cpu->regx, .page = location.page};
-            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
-            return (Location) {
-                .offset = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
-                .page   = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
-            };
+        case OPERAND_ADDRESS: {
+            return mos_indirect_x(cpu, operand.data.address);
         }
-        case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
@@ -356,19 +346,10 @@ Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand ope
     case INDY: {
         // same as index indirect but the addition of the Y reg occurs in the final address
         switch (operand.type) {
-        case OPERAND_LOCATION: {
-            Location location = operand.data.address.loc;
-            MOS_ASSERT(location.page == 0x00 , "Invalid Zero Page Address");
-            Location new_loc   = {.offset = location.offset    , .page = location.page};
-            Location new_loc_i = {.offset = new_loc.offset  + 1, .page = new_loc.page};
-            Location final = {
-                .offset = mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc)),   // fetch low-byte from new_loc
-                .page =   mos_cpu_read(cpu, mos_loc_to_uint16_t(new_loc_i)), // fetch high-byte from new_loc + 1
-            };
-            final.offset += cpu->regy; // final Address that contains the data
-            return final;
+        case OPERAND_ADDRESS: {
+            uint16_t location = operand.data.address;
+            return mos_indirect_y(cpu, location);
         }
-        case OPERAND_ABSOLUTE:
         case OPERAND_DATA:
         default: MOS_ILLEGAL_ACCESS(mode, operand.type);
         }
@@ -386,7 +367,7 @@ Location mos_fetch_operand_location(CPU *cpu, Addressing_Modes mode, Operand ope
 }
 
 // Reg , Z , N = M, memory into Reg
-void mos_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type)
+void mos_load_reg(MOS_Cpu *cpu, MOS_Instruction instruction, uint8_t *reg_type)
 {
     *reg_type = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
@@ -395,14 +376,14 @@ void mos_load_reg(CPU *cpu, Instruction instruction, uint8_t *reg_type)
 }
 
 // M = A | X | Y, store A | X | Y into memory
-void mos_store_reg(CPU *cpu, Instruction instruction, uint8_t data)
+void mos_store_reg(MOS_Cpu *cpu, MOS_Instruction instruction, uint8_t data)
 {
-    Location loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
-    mos_cpu_write(cpu, mos_loc_to_uint16_t(loc), data);  // Write Accumulator to memory
+    uint16_t loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    mos_cpu_write(cpu, loc, data);  // Write Accumulator to memory
 }
 
 // A = X | Y, transfer X | Y to A, TXA | TYA
-void mos_transfer_reg_to_accumulator(CPU *cpu, uint8_t data)
+void mos_transfer_reg_to_accumulator(MOS_Cpu *cpu, uint8_t data)
 {
     cpu->racc = data;
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
@@ -411,7 +392,7 @@ void mos_transfer_reg_to_accumulator(CPU *cpu, uint8_t data)
 }
 
 // X | Y = A, transfer Accumulator to X | Y, TAX | TAY
-void mos_transfer_accumulator_to_reg(CPU *cpu, uint8_t *reg_type)
+void mos_transfer_accumulator_to_reg(MOS_Cpu *cpu, uint8_t *reg_type)
 {
     *reg_type = cpu->racc;
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
@@ -419,7 +400,7 @@ void mos_transfer_accumulator_to_reg(CPU *cpu, uint8_t *reg_type)
     if (*reg_type & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void mos_add_with_carry(CPU *cpu, Instruction instruction)
+void mos_add_with_carry(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint16_t raw = data + cpu->racc + (cpu->psr & C_BIT_FLAG);
@@ -435,7 +416,7 @@ void mos_add_with_carry(CPU *cpu, Instruction instruction)
     cpu->racc = result;
 }
 
-void mos_sub_with_carry(CPU *cpu, Instruction instruction)
+void mos_sub_with_carry(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint16_t raw = cpu->racc + (~data) + (cpu->psr & C_BIT_FLAG);
@@ -459,7 +440,7 @@ void mos_sub_with_carry(CPU *cpu, Instruction instruction)
     cpu->racc = result;
 }
 
-void mos_compare_reg_with_data(CPU *cpu, Instruction instruction, uint8_t reg_type)
+void mos_compare_reg_with_data(MOS_Cpu *cpu, MOS_Instruction instruction, uint8_t reg_type)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint16_t result = reg_type - data;
@@ -470,7 +451,7 @@ void mos_compare_reg_with_data(CPU *cpu, Instruction instruction, uint8_t reg_ty
     if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void mos_transfer_stack_to_reg(CPU *cpu, uint8_t *data)
+void mos_transfer_stack_to_reg(MOS_Cpu *cpu, uint8_t *data)
 {
     *data = mos_cpu_read(cpu, mos_bytes_to_uint16_t(MOS_STACK_PAGE, cpu->sp));
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
@@ -479,18 +460,18 @@ void mos_transfer_stack_to_reg(CPU *cpu, uint8_t *data)
 }
 
 // A | SR
-void mos_push_reg_to_stack(CPU *cpu, uint8_t reg_type)
+void mos_push_reg_to_stack(MOS_Cpu *cpu, uint8_t reg_type)
 {
     mos_push_stack(cpu, reg_type);
 }
 
 // A or SR
-void mos_pull_reg_from_stack(CPU *cpu, uint8_t *reg_type)
+void mos_pull_reg_from_stack(MOS_Cpu *cpu, uint8_t *reg_type)
 {
     *reg_type = mos_pull_stack(cpu);
 }
 
-void mos_logical_and(CPU *cpu, Instruction instruction)
+void mos_logical_and(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint8_t result = cpu->racc & data;
@@ -501,7 +482,7 @@ void mos_logical_and(CPU *cpu, Instruction instruction)
     cpu->racc = result;
 }
 
-void mos_logical_xor(CPU *cpu, Instruction instruction)
+void mos_logical_xor(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint8_t result = cpu->racc ^ data;
@@ -512,7 +493,7 @@ void mos_logical_xor(CPU *cpu, Instruction instruction)
     cpu->racc = result;
 }
 
-void mos_logical_or(CPU *cpu, Instruction instruction)
+void mos_logical_or(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint8_t result = cpu->racc | data;
@@ -523,7 +504,7 @@ void mos_logical_or(CPU *cpu, Instruction instruction)
     cpu->racc = result;
 }
 
-void mos_bit_test(CPU *cpu, Instruction instruction)
+void mos_bit_test(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     uint8_t result = cpu->racc & data;
@@ -534,23 +515,23 @@ void mos_bit_test(CPU *cpu, Instruction instruction)
     if (data & V_BIT_FLAG) mos_set_psr_flags(cpu, V_BIT_FLAG);
 }
 
-void mos_branch_flag_clear(CPU *cpu, Instruction instruction, Status_Flags flag)
+void mos_branch_flag_clear(MOS_Cpu *cpu, MOS_Instruction instruction, Status_Flags flag)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     if (cpu->psr & flag) {
-        cpu->pc += (data);
+        cpu->pc += data;
     }
 }
 
-void mos_branch_flag_set(CPU *cpu, Instruction instruction, Status_Flags flag)
+void mos_branch_flag_set(MOS_Cpu *cpu, MOS_Instruction instruction, Status_Flags flag)
 {
     uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
     if (!(cpu->psr & flag)) {
-        cpu->pc += (data);
+        cpu->pc += data;
     }
 }
 
-void mos_decrement_regx(CPU *cpu)
+void mos_decrement_regx(MOS_Cpu *cpu)
 {
     cpu->regx--;
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
@@ -558,7 +539,7 @@ void mos_decrement_regx(CPU *cpu)
     if (cpu->regx & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void mos_decrement_regy(CPU *cpu)
+void mos_decrement_regy(MOS_Cpu *cpu)
 {
     cpu->regy--;
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
@@ -566,17 +547,17 @@ void mos_decrement_regy(CPU *cpu)
     if (cpu->regy & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void mos_decrement(CPU *cpu, Instruction instruction)
+void mos_decrement(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
-    Location loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
-    uint8_t data = mos_cpu_read(cpu, mos_loc_to_uint16_t(loc));
-    mos_cpu_write(cpu, mos_loc_to_uint16_t(loc), --data); // Decrement
+    uint16_t loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_cpu_read(cpu, loc);
+    mos_cpu_write(cpu, loc, --data); // Decrement
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
     if (data == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
     if (data & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void mos_increment_regx(CPU *cpu)
+void mos_increment_regx(MOS_Cpu *cpu)
 {
     cpu->regx++;
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
@@ -584,7 +565,7 @@ void mos_increment_regx(CPU *cpu)
     if (cpu->regx & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void mos_increment_regy(CPU *cpu)
+void mos_increment_regy(MOS_Cpu *cpu)
 {
     cpu->regy++;
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
@@ -592,57 +573,107 @@ void mos_increment_regy(CPU *cpu)
     if (cpu->regy & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void mos_increment(CPU *cpu, Instruction instruction)
+void mos_increment(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
-    Location loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
-    uint8_t data = mos_cpu_read(cpu, mos_loc_to_uint16_t(loc));
-    mos_cpu_write(cpu, mos_loc_to_uint16_t(loc), ++data); // Increment
+    uint16_t loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    uint8_t data = mos_cpu_read(cpu, loc);
+    mos_cpu_write(cpu, loc, ++data); // Increment
     mos_clear_psr_flags(cpu, Z_BIT_FLAG | N_BIT_FLAG);
     if (data == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
     if (data & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
 }
 
-void mos_arithmetic_shift_left(CPU *cpu, uint8_t *data)
+// asl on accumulator
+void mos_arithmetic_shift_left_racc(MOS_Cpu *cpu)
 {
-    uint8_t result = *data << 1; // mult
+    uint8_t result = cpu->racc << 1; // mult
     mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
-    if (*data & N_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 7 (neg bit)
+    if (cpu->racc & N_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 7 (neg bit)
     if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
     if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
-    *data = result;
+    cpu->racc = result;
 }
 
-void mos_logical_shift_right(CPU *cpu, uint8_t *data)
+// asl on memory
+void mos_arithmetic_shift_left_memory(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
-    uint8_t result = *data >> 1; // div
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t result = data << 1; // mult
     mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
-    mos_set_psr_flags(cpu, (cpu->psr >> C_BIT_FLAG) & 1); // Set to the contents of old bit 0 (carry bit)
+    if (data & N_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 7 (neg bit)
     if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
     if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
-    *data = result;
+    uint16_t loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    mos_cpu_write(cpu, loc, result);
 }
 
-void mos_rotate_left(CPU *cpu, uint8_t *data)
+void mos_logical_shift_right_racc(MOS_Cpu *cpu)
 {
-    uint8_t result = *data << 1;
+    uint8_t result = cpu->racc >> 1; // div
     mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
-    mos_set_psr_flags(cpu, (cpu->psr >> 7) & 1); // Set to the contents of old bit 7 (neg bit)
+    if (cpu->racc & C_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 0
     if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
     if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
-    *data = result;
+    cpu->racc = result;
 }
 
-void mos_rotate_right(CPU *cpu, uint8_t *data)
+void mos_logical_shift_right_memory(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
-    uint8_t result = *data >> 1;
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t result = data >> 1; // div
     mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
-    mos_set_psr_flags(cpu, (cpu->psr >> C_BIT_FLAG) & 1); // Set to the contents of old bit 0 (carry bit)
+    if (data & C_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 0 (carry bit)
     if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
     if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
-    *data = result;
+    uint16_t loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    mos_cpu_write(cpu, loc, result);
 }
 
-void mos_break(CPU *cpu)
+void mos_rotate_left_racc(MOS_Cpu *cpu)
+{
+    uint8_t result = cpu->racc << 1;
+    mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu->racc & N_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 7 (neg bit)
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    cpu->racc = result;
+}
+
+void mos_rotate_left_memory(MOS_Cpu *cpu, MOS_Instruction instruction)
+{
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t result = data << 1;
+    mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
+    if (data & N_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 7 (neg bit)
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    uint16_t loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    mos_cpu_write(cpu, loc, result);
+}
+
+void mos_rotate_right_racc(MOS_Cpu *cpu)
+{
+    uint8_t result = cpu->racc >> 1;
+    mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
+    if (cpu->racc & C_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 0 (carry bit)
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    cpu->racc = result;
+}
+
+void mos_rotate_right_memory(MOS_Cpu *cpu, MOS_Instruction instruction)
+{
+    uint8_t data = mos_fetch_operand_data(cpu, instruction.mode, instruction.operand);
+    uint8_t result = data >> 1;
+    mos_clear_psr_flags(cpu, C_BIT_FLAG | Z_BIT_FLAG | N_BIT_FLAG);
+    if (data & C_BIT_FLAG) mos_set_psr_flags(cpu, C_BIT_FLAG); // Set to the contents of old bit 0 (carry bit)
+    if (result == 0) mos_set_psr_flags(cpu, Z_BIT_FLAG);
+    if (result & N_BIT_FLAG) mos_set_psr_flags(cpu, N_BIT_FLAG);
+    uint16_t loc = mos_fetch_operand_location(cpu, instruction.mode, instruction.operand);
+    mos_cpu_write(cpu, loc, result);
+}
+
+void mos_break(MOS_Cpu *cpu)
 {
     mos_clear_psr_flags(cpu, B_BIT_FLAG);
     mos_set_psr_flags(cpu, B_BIT_FLAG);
@@ -656,7 +687,7 @@ void mos_break(CPU *cpu)
     printf("Program Interrupted\n");
 }
 
-bool mos_decode(CPU *cpu, Instruction instruction)
+bool mos_decode(MOS_Cpu *cpu, MOS_Instruction instruction)
 {
     switch (instruction.opcode) {
     case LDA: mos_load_reg(cpu, instruction, &cpu->racc);             return true;
@@ -714,14 +745,50 @@ bool mos_decode(CPU *cpu, Instruction instruction)
     case DEX: mos_decrement_regx(cpu);                                return true;
     case DEY: mos_decrement_regy(cpu);                                return true;
 
-    case ASL: MOS_UNIMPLEMENTED("ASL");
-    case LSR: MOS_UNIMPLEMENTED("LSR");
-    case ROL: MOS_UNIMPLEMENTED("ROL");
-    case ROR: MOS_UNIMPLEMENTED("ROR");
+    case ASL: {
+        if (instruction.mode == ACCU) {
+            mos_arithmetic_shift_left_racc(cpu);
+            return true;
+        } else {
+            mos_arithmetic_shift_left_memory(cpu, instruction);
+            return true;
+        }
+    }
+    case LSR: {
+        if (instruction.mode == ACCU) {
+            mos_logical_shift_right_racc(cpu);
+            return true;
+        } else {
+            mos_logical_shift_right_memory(cpu, instruction);
+            return true;
+        }
+    }
+    case ROL: {
+        if (instruction.mode == ACCU) {
+            mos_rotate_left_racc(cpu);
+            return true;
+        } else {
+            mos_rotate_left_memory(cpu, instruction);
+            return true;
+        }
+    }
+    case ROR: {
+        if (instruction.mode == ACCU) {
+            mos_rotate_right_racc(cpu);
+            return true;
+        } else {
+            mos_rotate_right_memory(cpu, instruction);
+            return true;
+        }
+    }
 
     case BRK: mos_break(cpu);                                         return true;
 
-    case NOP: MOS_UNIMPLEMENTED("NOP");
+    case NOP: {
+        // Nothing
+        return true;
+    };
+
     case RTI: MOS_UNIMPLEMENTED("RTI");
     case RTS: MOS_UNIMPLEMENTED("RTS");
     case JMP: MOS_UNIMPLEMENTED("JMP");
@@ -735,7 +802,7 @@ bool mos_decode(CPU *cpu, Instruction instruction)
     }
 }
 
-const char *mos_addr_mode_as_cstr(Addressing_Modes mode)
+const char *mos_addr_mode_as_cstr(MOS_AddressingModes mode)
 {
     switch (mode) {
     case IMPL: return "IMPLICIT";
@@ -755,7 +822,7 @@ const char *mos_addr_mode_as_cstr(Addressing_Modes mode)
     }
 }
 
-const char *mos_opcode_as_cstr(Opcode opcode)
+const char *mos_opcode_as_cstr(MOS_Opcode opcode)
 {
     switch (opcode) {
     case BRK:                  return "BRK";
@@ -820,17 +887,16 @@ const char *mos_opcode_as_cstr(Opcode opcode)
     }
 }
 
-const char *mos_operand_type_as_cstr(Operand_Type type)
+const char *mos_operand_type_as_cstr(MOS_OperandType type)
 {
     switch (type) {
-    case OPERAND_ABSOLUTE: return "OPERAND_ABSOLUTE";
-    case OPERAND_LOCATION: return "OPERAND_LOCATION";
+    case OPERAND_ADDRESS:  return "OPERAND_ADDRESS";
     case OPERAND_DATA:     return "OPERAND_DATA";
     default:               return NULL;
     }
 }
 
-Opcode_Info opcode_matrix[UINT8_MAX + 1] = {
+MOS_OpcodeInfo opcode_matrix[UINT8_MAX + 1] = {
     //-0                  -1          -2            -3              -4         -5         -6                 -7           -8          -9           -A              -B          -C          -D          -E          -F
     {BRK, IMPL},  {ORA, INDX},        {0x00},        {0x00},        {0x00}, {ORA, ZP} ,  {ASL, ZP},      {0x00},  {PHP, IMPL}, {ORA, IMME},   {ASL, ACCU},        {0x00},      {0x00},  {ORA, ABS},   {ASL, ABS},    {0x00}, // 0-
     {BPL, REL} ,  {ORA, INDY},        {0x00},        {0x00},        {0x00}, {ORA, ZPX}, {ASL, ZPX},      {0x00},  {CLC, IMPL}, {ORA, ABSY},        {0x00},        {0x00},      {0x00}, {ORA, ABSX},  {ASL, ABSX},    {0x00}, // 1-
