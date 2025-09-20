@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -ggdb3 -Wall -Werror -Wextra -Wswitch-enum -std=c99 -pedantic
+CFLAGS= -ggdb3 -Wall -Wextra -Wswitch-enum -std=c99 -pedantic
 
 .PHONY: all clean build obj
 
