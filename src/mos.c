@@ -126,9 +126,7 @@ uint16_t mos_indirect_x(MOS_Cpu *cpu, uint16_t location)
 
     uint16_t new_loc = mos_bytes_to_uint16_t(high_byte , low_byte + cpu->regx);
     mos_uint16_t_to_bytes(new_loc, &high_byte, &low_byte);
-
     uint16_t new_loc_i = mos_bytes_to_uint16_t(high_byte , low_byte + 1);
-
     // fetch low-byte from new_loc, fetch high-byte from new_loc + 1
     return mos_bytes_to_uint16_t(mos_cpu_read(cpu, new_loc_i), mos_cpu_read(cpu, new_loc));
 }
