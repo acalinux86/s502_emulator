@@ -3,7 +3,7 @@ CFLAGS= -ggdb3 -Wall -Wextra -Wswitch-enum -std=c99 -pedantic
 
 .PHONY: all clean build obj
 
-all: build/mosemu build/mosasm build/mosdisasm
+all: mosemu mosasm mosdisasm
 
 build:
 	mkdir -p build/
@@ -14,14 +14,14 @@ obj:
 obj/mos.o: src/mos.c | obj
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-build/mosemu: obj/mos.o src/mosemu.c | build
-	$(CC) $(CFLAGS) -o $@ $^
+mosemu: obj/mos.o src/mosemu.c | build
+	$(CC) $(CFLAGS) -o build/$@ $^
 
-build/mosasm: obj/mos.o src/mosasm.c | build
-	$(CC) $(CFLAGS) -o $@ $^
+mosasm: obj/mos.o src/mosasm.c | build
+	$(CC) $(CFLAGS) -o build/$@ $^
 
-build/mosdisasm: obj/mos.o src/mosdisasm.c | build
-	$(CC) $(CFLAGS) -o $@ $^
+mosdisasm: obj/mos.o src/mosdisasm.c | build
+	$(CC) $(CFLAGS) -o build/$@ $^
 
 clean:
 	rm -r build/ obj/
