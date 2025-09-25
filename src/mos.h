@@ -18,7 +18,7 @@
 typedef uint8_t (*read_memory)(void *, uint16_t);
 typedef void    (*write_memory)(void *, uint16_t, uint8_t);
 
-typedef struct {
+typedef struct _mos_mmap {
     void *device;
     read_memory  read;
     write_memory write;
@@ -29,7 +29,7 @@ typedef struct {
 
 typedef ARRAY(MOS_MMap) MOS_MMaps;
 
-typedef struct {
+typedef struct _mos_cpu {
     uint8_t  regx; // Reg x
     uint8_t  regy; // Reg y
     uint8_t  racc; // Accumulator
@@ -39,7 +39,7 @@ typedef struct {
     MOS_MMaps entries;
 } MOS_Cpu;
 
-typedef enum _status_flags {
+typedef enum _mos_status_flags {
     N_BIT_FLAG = 0x80, // Negative bit flag
     V_BIT_FLAG = 0x40, // Overflow bit flag
     U_BIT_FLAG = 0x20, // UNSET BIT, intialized with the PSR
@@ -50,7 +50,7 @@ typedef enum _status_flags {
     C_BIT_FLAG = 0x01, // Carry bit flag
 } MOS_StatusFlags;
 
-typedef enum {
+typedef enum _mos_addressing_modes {
     IMPL, // IMPLICIT | IMPLIED
     ACCU, // ACCUMULATOR
     IMME, // IMMEDIATE
@@ -66,7 +66,7 @@ typedef enum {
     INDY, // INDIRECT_Y
 } MOS_AddressingModes;
 
-typedef enum {
+typedef enum _mos_opcodes {
     // System Functions
     BRK,
     NOP,
@@ -156,28 +156,28 @@ typedef enum {
     ERROR_FETCH_LOCATION,
 } MOS_Opcode;
 
-typedef enum {
+typedef enum _mos_operand_type {
     OPERAND_ADDRESS,
     OPERAND_DATA,
 } MOS_OperandType;
 
-typedef union {
+typedef union _mos_operand_data {
     uint16_t address;
     uint8_t data;
 } MOS_OperandData;
 
-typedef struct {
+typedef struct _mos_operand {
     MOS_OperandType type;
     MOS_OperandData data;
 } MOS_Operand;
 
-typedef struct {
+typedef struct _mos_instruction {
     MOS_AddressingModes mode;
     MOS_Opcode  opcode;
     MOS_Operand operand;
 } MOS_Instruction;
 
-typedef struct {
+typedef struct _mos_opcode_info {
     MOS_Opcode opcode;
     MOS_AddressingModes mode;
 } MOS_OpcodeInfo;
