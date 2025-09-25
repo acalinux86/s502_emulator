@@ -201,9 +201,12 @@ char *mos_to_upper(char *buffer)
     for (uint64_t i = 0; i < n; ++i) {
         // assert the char we are receiving is lower case
         // maybe the assert is too strict
-        // TODO: resolve the assert
-        assert(buffer[i] >= 'a' && buffer[i] <= 'z');
-        buf[i] = buffer[i] - (97 - 65);
+        // FIXED: resolved the assert
+        if (buffer[i] >= 'a' && buffer[i] <= 'z') {
+            buf[i] = buffer[i] - (97 - 65); // convert
+        } else {
+            buf[i] = buffer[i]; // do nothing
+        }
     }
     return mos_strdup(buf, n);
 }
