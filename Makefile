@@ -3,7 +3,7 @@ CFLAGS= -ggdb3 -Wall -Wextra -Wswitch-enum -std=c99 -pedantic
 
 .PHONY: all clean build obj
 
-all: mosemu mosasm mosdisasm
+all: obj/mos.o mosemu mosasm mosdisasm
 
 build:
 	mkdir -p build/
